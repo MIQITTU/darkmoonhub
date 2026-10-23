@@ -533,6 +533,12 @@ function stream(req, res, user) {
   const set = streams.get(user.uid) || new Set(); set.add(res); streams.set(user.uid, set);
   req.on('close', () => { set.delete(res); if (!set.size) streams.delete(user.uid); });
 }
+/* Cache-busting: every page asks for assets/app.js?v=<fingerprint> and assets/style.css?v=<fingerprint>.
+   The fingerprint is a hash of the files' contents, so after each deploy browsers fetch the new versions
+   instead of mixing a new page with an old cached script. Versioned files can then be cached for a long time. */
+const ASSET_V = {};
+for (const f of ['app.js', 'style.css']) { try { ASSET_V[f] = crypto.createHash('sha1').update(fs.readFileSync(path.join(PUB, 'assets', f))).digest('hex').slice(0, 10); } catch (e) { ASSET_V[f] = String(Date.now()); } }
+const stampHtml = html => html.replace(/(["'])assets\/(app\.js|style\.css)\1/g, (m, q, f) => `${q}assets/${f}?v=${ASSET_V[f]}${q}`);
 function serveStatic(req, res, url) {
   let p; try { p = decodeURIComponent(url.pathname); } catch (e) { res.writeHead(400, SEC); return res.end(); }
   if (/[\u0000-\u001f]/.test(p)) { res.writeHead(400, SEC); return res.end('Bad request'); }
@@ -542,7 +548,9 @@ function serveStatic(req, res, url) {
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain', ...SEC }); return res.end('Not found'); }
     const ext = path.extname(file);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600', ...SEC });
+    const versioned = url.searchParams.has('v');
+    if (ext === '.html') data = Buffer.from(stampHtml(data.toString('utf8')));
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': ext === '.html' ? 'no-cache' : versioned ? 'public, max-age=31536000, immutable' : p.startsWith('/vendor/') ? 'public, max-age=604800' : 'no-cache', ...SEC });
     res.end(req.method === 'HEAD' ? undefined : data);
   });
 }
