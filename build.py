@@ -24,7 +24,6 @@ SHELL = """<!doctype html>
 {body}
 </main>
 <div id="foot"></div>
-<script src="assets/board.js"></script>
 <script src="assets/app.js"></script>
 {scripts}{script}
 </body>

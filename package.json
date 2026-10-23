@@ -2,7 +2,7 @@
   "name": "darkmoonhub",
   "version": "3.6.0",
   "private": true,
-  "description": "Darkmoon Hub: a members community with chat, forum, map, market and messages, plus psi tests and leaderboards.",
+  "description": "Darkmoon Hub: a members community with chat, forum, map, market and messages.",
   "main": "server.js",
   "scripts": { "start": "node server.js", "build": "python3 build.py" },
   "dependencies": { "pg": "8.16.3" },

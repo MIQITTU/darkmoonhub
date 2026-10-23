@@ -19,7 +19,6 @@
 <div id="app"></div>
 </main>
 <div id="foot"></div>
-<script src="assets/board.js"></script>
 <script src="assets/app.js"></script>
 <script>
 const app=document.getElementById('app');let me;
@@ -30,7 +29,7 @@ const app=document.getElementById('app');let me;
       <form id="nr" class="grid2" style="align-items:end"><div class="field"><label class="lbl" for="rt">New room name</label><input type="text" id="rt" maxlength="40"></div>
       <div class="field"><label class="lbl" for="rd">Description</label><input type="text" id="rd" maxlength="200"></div><button class="btn" type="submit" style="justify-self:start">Create room</button></form></section>
     <section class="panel"><h2>Members</h2><form class="searchbar" id="uf"><input type="search" id="uq" placeholder="Search by name or email" aria-label="Search members"><button class="btn" type="submit">Search</button></form>
-      <div class="tablewrap"><table class="board"><thead><tr><th>Member</th><th>Status</th><th style="text-align:right">Runs</th><th>Actions</th></tr></thead><tbody id="users"></tbody></table></div>
+      <div class="tablewrap"><table class="board"><thead><tr><th>Member</th><th>Status</th><th style="text-align:right">Threads</th><th>Actions</th></tr></thead><tbody id="users"></tbody></table></div>
       <p class="muted" style="font-size:.9rem">Muted members can read but can't post anywhere. Banned members are signed out and blocked. Content (messages, threads, comments, listings, pins) can be deleted directly from where it appears.</p></section></div>`;
   document.getElementById('nr').onsubmit=UP.guard(async e=>{e.preventDefault();try{await UP.api('POST','rooms',{title:document.getElementById('rt').value,desc:document.getElementById('rd').value});document.getElementById('rt').value='';document.getElementById('rd').value='';rooms();UP.toast('Room created')}catch(x){UP.toast(x.message)}});
   document.getElementById('uf').onsubmit=e=>{e.preventDefault();users()};
@@ -49,7 +48,7 @@ async function rooms(){const r=(await UP.api('GET','rooms')).rooms,box=document.
 async function users(focus){const q=document.getElementById('uq').value.trim();let list;try{list=(await UP.api('GET','admin/users'+(q?'?q='+encodeURIComponent(q):''))).users}catch(x){UP.toast(x.message);return}
   const tb=document.getElementById('users');
   tb.innerHTML=list.map(u=>{const muted=u.mutedUntil>Date.now();return`<tr id="u-${u.uid}" ${focus===u.uid?'style="outline:1px solid var(--cyan)"':''}><td style="min-width:180px">${UP.who(u)}<br><span class="ts">${UP.esc(u.email)}</span></td>
-    <td>${u.banned?'<span class="pill miss">Banned</span>':muted?`<span class="pill" style="color:var(--gold);border-color:var(--gold)">Muted until ${new Date(u.mutedUntil).toLocaleString()}</span>`:'<span class="pill hit">Active</span>'}</td><td class="n">${u.runs}</td>
+    <td>${u.banned?'<span class="pill miss">Banned</span>':muted?`<span class="pill" style="color:var(--gold);border-color:var(--gold)">Muted until ${new Date(u.mutedUntil).toLocaleString()}</span>`:'<span class="pill hit">Active</span>'}</td><td class="n">${u.posts}</td>
     <td><div class="row" style="gap:6px;flex-wrap:wrap;min-width:260px">${u.uid===me.uid?'<span class="muted">You</span>':`
       ${muted?'<button class="btn ghost sm" data-a="unmute" type="button">Unmute</button>':`<select data-min aria-label="Mute length" style="width:auto;padding:6px"><option value="60">1 hour</option><option value="1440">1 day</option><option value="10080">1 week</option><option value="43200">30 days</option></select><button class="btn ghost sm" data-a="mute" type="button">Mute</button>`}
       ${u.banned?'<button class="btn ghost sm" data-a="unban" type="button">Unban</button>':'<button class="btn ghost sm" data-a="ban" type="button">Ban</button>'}

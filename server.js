@@ -1,4 +1,4 @@
-/* Darkmoon Hub server — site, Google sign-in, tests + leaderboard, chat rooms, DMs, notifications,
+/* Darkmoon Hub server — site, Google sign-in, chat rooms, DMs, notifications,
    forum, marketplace, map pins, profiles and moderation. Zero dependencies. Node 18+.
    Start:  node server.js
    Environment:
@@ -10,7 +10,6 @@
      ALLOW_DEV_LOGIN   set to 1 to allow name+email sign-in without Google (testing only) */
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
-const Board = require('./public/assets/board.js');
 
 const PORT = +process.env.PORT || 3000;
 const PUB = path.join(__dirname, 'public');
@@ -19,10 +18,6 @@ const DB_FILE = path.join(DATA, 'db.json');
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
 const DEV_LOGIN = process.env.ALLOW_DEV_LOGIN === '1';
-// Fastest physically possible time between two finished runs of the same test (anti-spam only).
-// Set below what a quick player can do, including players with reduced motion, where animations are near-instant.
-// Zener: 25 cards x 0.26 s lockout = 6.5 s. Move the Line: 20 s fixed. Compass/Ball with reduced motion: a few seconds.
-const MIN_GAP = { esp: 6, precog: 6, pkline: 19, compass: 19, ball: 1, remote: 0 };
 const ROOM_KEEP = 3000, DM_KEEP = 2000, NOTIF_KEEP = 200;
 
 /* ================= storage =================
@@ -32,9 +27,13 @@ const ROOM_KEEP = 3000, DM_KEEP = 2000, NOTIF_KEEP = 200;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const MAPS = ['users', 'subs', 'emails', 'tokens', 'rooms', 'messages', 'dms', 'notifs', 'threads', 'listings', 'pins'];
 const dict = (o = {}) => Object.assign(Object.create(null), o);   // no prototype: "__proto__", "constructor" etc. are ordinary missing keys
-const empty = () => ({ ...Object.fromEntries(MAPS.map(k => [k, dict()])), scores: [] });
+const empty = () => Object.fromEntries(MAPS.map(k => [k, dict()]));
 let db = empty();
-function hydrate(raw) { db = { ...empty(), ...raw }; MAPS.forEach(k => db[k] = dict(raw[k] || {})); Object.values(db.dms).forEach(d => d.read = dict(d.read || {})); }
+function hydrate(raw) { db = { ...empty(), ...raw }; delete db.scores;   // psi-test scores from older versions are dropped
+  MAPS.forEach(k => db[k] = dict(raw[k] || {})); Object.values(db.dms).forEach(d => d.read = dict(d.read || {}));
+  // Older versions had psi-test achievements; their inbox notices are removed and members' achievements are re-recorded.
+  const OLD = /^Achievement unlocked: (First Contact|Full Spectrum|Above the Noise|Two Sigma|Three Sigma|The Other Side|Consistent Signal|Initiate|Adept|Centurion|Remote Eye)\./;
+  for (const k of Object.keys(db.notifs)) db.notifs[k] = db.notifs[k].filter(n => !(n.type === 'achievement' && OLD.test(n.text))); }
 const newId = () => crypto.randomBytes(6).toString('hex');
 let pool = null, saveTimer = null, firstDirty = 0, writing = null, dirty = false;
 async function writeNow() {
@@ -69,7 +68,7 @@ async function initStore() {
     try { hydrate(JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))); } catch (e) { /* first run */ }
   }
   if (!Object.keys(db.rooms).length) {
-    [['General', 'Talk about anything.'], ['Results', 'Post your runs and compare notes.'], ['Remote Viewing', 'Sessions, targets and judging.']]
+    [['General', 'Talk about anything.'], ['Sightings', 'What you saw, where and when.'], ['Experiences', 'Dreams, signs and the unexplained.']]
       .forEach(([title, desc], i) => { const id = newId(); db.rooms[id] = { id, title, desc, order: i, created: Date.now() }; db.messages[id] = []; });
   }
   await writeNow();
@@ -193,7 +192,7 @@ on('POST', '/api/auth/google', async ctx => {
   limit('auth:' + ctx.ip, 120, 600e3, 'Too many sign-in attempts from this network. Wait a few minutes.');
   const p = await verifyGoogle(ctx.body.credential), email = p.email.toLowerCase();
   let uid = db.subs[p.sub] || db.emails[email], u = uid && db.users[uid];
-  if (!u) { uid = newId(); u = db.users[uid] = { uid, name: uniqueName(p.given_name || p.name || email.split('@')[0]), email, role: 'user', created: Date.now(), bio: '' }; db.emails[email] = uid; }
+  if (!u) { uid = newId(); u = db.users[uid] = { uid, name: uniqueName(p.given_name || p.name || email.split('@')[0]), email, role: 'user', created: Date.now(), bio: '', ach: [] }; db.emails[email] = uid; }
   db.subs[p.sub] = uid; u.googleSub = p.sub;
   if (u.banned) fail(403, 'This account has been banned.');
   return issue(u);
@@ -205,14 +204,16 @@ on('POST', '/api/auth/dev', ctx => {
   if (!NAME.test(name)) fail(400, 'Use letters, numbers, spaces, dots, dashes or underscores in your name.');
   if (!EMAIL.test(email)) fail(400, 'Enter a valid email address.');
   let u = db.users[db.emails[email]];
-  if (!u) { if (nameTaken(name)) fail(409, 'That name is taken. Choose another.'); const uid = newId(); u = db.users[uid] = { uid, name, email, role: 'user', created: Date.now(), bio: '' }; db.emails[email] = uid; }
+  if (!u) { if (nameTaken(name)) fail(409, 'That name is taken. Choose another.'); const uid = newId(); u = db.users[uid] = { uid, name, email, role: 'user', created: Date.now(), bio: '', ach: [] }; db.emails[email] = uid; }
   if (u.banned) fail(403, 'This account has been banned.');
   return issue(u);
 });
 on('POST', '/api/auth/logout', ctx => { const h = /^Bearer\s+([a-f0-9]{48})$/.exec(ctx.req.headers.authorization || ''); if (h) { delete db.tokens[h[1]]; save(); } return { ok: true }; });
 
 /* ---- me & profiles ---- */
-on('GET', '/api/me', ctx => { const u = ctx.user; if (!u) fail(401, 'Sign in first.'); return { user: meView(u), unread: unread(u.uid) }; });
+on('GET', '/api/me', ctx => { const u = ctx.user; if (!u) fail(401, 'Sign in first.');
+  if (!Array.isArray(u.ach) || (!u.ach.includes('moon') && Date.now() - u.created >= 30 * 864e5)) award(u);
+  return { user: meView(u), unread: unread(u.uid) }; });
 on('PATCH', '/api/me', ctx => {
   const u = need(ctx);
   if (ctx.body.name !== undefined) {
@@ -224,15 +225,41 @@ on('PATCH', '/api/me', ctx => {
   if (ctx.body.bio !== undefined) u.bio = text(ctx.body.bio, 500, { field: 'Bio' });
   save(); return { user: meView(u) };
 });
-function profileExtra(uid) {
-  return { threads: Object.values(db.threads).filter(t => t.uid === uid).length, pins: Object.values(db.pins).filter(p => p.uid === uid).length };
+/* ---- achievements: earned through community activity ---- */
+const ACH = [
+  ['words', 'First Words', 'Send a message in a chat room.', c => c.chat >= 1],
+  ['regular', 'Regular', 'Send 100 chat messages.', c => c.chat >= 100],
+  ['voice', 'Witness', 'Start a forum thread.', c => c.threads >= 1],
+  ['chronicler', 'Chronicler', 'Start 10 forum threads.', c => c.threads >= 10],
+  ['reply', 'Voice in the Dark', 'Comment on a thread.', c => c.comments >= 1],
+  ['counsel', 'Counsel', 'Leave 25 comments.', c => c.comments >= 25],
+  ['pin', 'Cartographer', 'Place a pin on the map.', c => c.pins >= 1],
+  ['surveyor', 'Surveyor', 'Place 10 pins on the map.', c => c.pins >= 10],
+  ['trade', 'Merchant', 'Post a listing in the market.', c => c.listings >= 1],
+  ['moon', 'Full Cycle', 'Be a member for 30 days.', c => c.days >= 30]
+];
+function activity(uid) {
+  const u = db.users[uid] || {}, c = { chat: 0, threads: 0, comments: 0, pins: 0, listings: 0, days: (Date.now() - (u.created || Date.now())) / 864e5 };
+  for (const list of Object.values(db.messages)) for (const m of list) if (m.uid === uid) c.chat++;
+  for (const t of Object.values(db.threads)) { if (t.uid === uid) c.threads++; for (const m of t.comments) if (m.uid === uid) c.comments++; }
+  for (const p of Object.values(db.pins)) if (p.uid === uid) c.pins++;
+  for (const l of Object.values(db.listings)) if (l.uid === uid) c.listings++;
+  return c;
+}
+// Once unlocked (recorded in u.ach), an achievement stays earned even if the content behind it is later deleted.
+const achievements = uid => { const c = activity(uid), had = (db.users[uid] && db.users[uid].ach) || []; return { counts: c, list: ACH.map(([id, name, desc, ok]) => ({ id, name, desc, earned: had.includes(id) || !!ok(c) })) }; };
+// Called after anything that can earn an achievement: notifies once per new achievement.
+// Existing members' earlier achievements are recorded silently the first time.
+function award(u) {
+  const now = achievements(u.uid).list.filter(a => a.earned), first = !Array.isArray(u.ach); if (first) u.ach = [];
+  for (const a of now) if (!u.ach.includes(a.id)) { u.ach.push(a.id); if (!first) notify(u.uid, { type: 'achievement', text: `Achievement unlocked: ${a.name}. ${a.desc}`, link: 'profile.html#' + u.uid }); }
+  save();
 }
 on('GET', '/api/users/:uid', ctx => {
   const u = db.users[ctx.params.uid]; if (!u) fail(404, 'No such user.');
-  const scores = db.scores.filter(s => s.uid === u.uid);
+  const a = achievements(u.uid);
   return {
-    user: pub(u), stats: Board.stats(scores), achievements: Board.achievements(scores, profileExtra(u.uid)), totalRuns: scores.length,
-    log: scores.slice().sort((a, b) => b.at - a.at).slice(0, 1000).map(x => ({ test: x.test, hits: x.hits, n: x.n, at: x.at, detail: x.detail || null })),
+    user: pub(u), achievements: a.list, counts: { chat: a.counts.chat, threads: a.counts.threads, comments: a.counts.comments, pins: a.counts.pins, listings: a.counts.listings },
     threads: Object.values(db.threads).filter(t => t.uid === u.uid).sort((a, b) => b.at - a.at).slice(0, 20).map(t => ({ id: t.id, title: t.title, at: t.at, comments: t.comments.length })),
     listings: Object.values(db.listings).filter(l => l.uid === u.uid).sort((a, b) => b.at - a.at).slice(0, 20).map(l => ({ id: l.id, title: l.title, price: l.price, sold: !!l.sold, at: l.at })),
     pins: Object.values(db.pins).filter(p => p.uid === u.uid).map(p => ({ id: p.id, title: p.title, lat: p.lat, lng: p.lng }))
@@ -241,61 +268,6 @@ on('GET', '/api/users/:uid', ctx => {
 on('GET', '/api/users', ctx => {
   need(ctx); const q = ctx.url.searchParams.get('q');
   return { users: Object.values(db.users).filter(u => !u.banned && matchQ(q, u.name)).slice(0, 20).map(pub) };
-});
-
-/* ---- tests & leaderboard ---- */
-/* Recounts a score from the run's exact record. Returns the cleaned record, or fails if it doesn't add up. */
-function checkDetail(t, h, d) {
-  if (d === undefined || d === null) return null;
-  const bad = () => fail(400, 'The run record does not match the score. Not posted.');
-  if (typeof d !== 'object' || Array.isArray(d) || JSON.stringify(d).length > 2000) bad();
-  const ints = (a, n, ok) => Array.isArray(a) && a.length === n && a.every(x => Number.isInteger(x) && ok(x));
-  if (t.id === 'esp' || t.id === 'precog') {
-    if (!/^[0-4]{25}$/.test(d.g || '') || !/^[0-4]{25}$/.test(d.t || '')) bad();
-    if ([...d.g].filter((x, i) => x === d.t[i]).length !== h) bad();
-    return { g: d.g, t: d.t };
-  }
-  if (t.id === 'compass') {   // full record: every one of the 2,001 pushes, as hex (1 = clockwise)
-    if (![1, -1].includes(d.dir) || typeof d.bits !== 'string' || !/^[0-9a-f]{501}$/.test(d.bits) || !Number.isInteger(d.min) || !Number.isInteger(d.max)) bad();
-    let net = 0, lo = 0, hi = 0, cw = 0;
-    for (let k = 0; k < 2001; k++) { const b = (parseInt(d.bits[k >> 2], 16) >> (3 - (k & 3))) & 1; cw += b; net += b ? 1 : -1; lo = Math.min(lo, net); hi = Math.max(hi, net); }
-    if ((d.dir === 1 ? cw : 2001 - cw) !== h || lo !== d.min || hi !== d.max) bad();
-    return { dir: d.dir, bits: d.bits, min: d.min, max: d.max };
-  }
-  if (t.id === 'ball') {
-    if (!ints(d.s, 20, x => x === 1 || x === -1) || !ints(d.b, 20, x => x >= 0 && x <= 9)) bad();
-    if (d.b.filter((x, i) => (x >= 5 ? 1 : -1) === d.s[i]).length !== h) bad();
-    return { s: d.s, b: d.b };
-  }
-  if (t.id === 'pkline') {
-    if (![d.dev, d.min, d.max].every(Number.isInteger) || d.dev !== 2 * h - 2000 || d.min > Math.min(0, d.dev) || d.max < Math.max(0, d.dev) || d.min < -2000 || d.max > 2000) bad();
-    return { dev: d.dev, min: d.min, max: d.max };
-  }
-  if (t.id === 'remote') {
-    if (![1, 2, 3, 4].includes(d.rank) || (d.rank === 1) !== (h === 1)) bad();
-    return { rank: d.rank, target: text(d.target, 60, { field: 'Target', multiline: false }), sid: text(d.sid, 16, { field: 'Session', multiline: false }) };
-  }
-  return null;
-}
-const usersForRank = () => Object.fromEntries(Object.entries(db.users).filter(([, u]) => !u.banned).map(([k, u]) => [k, { name: u.name }]));
-on('POST', '/api/scores', ctx => {
-  const u = need(ctx); limit('scores:' + u.uid, 60, 600e3, 'Too many scores at once. Slow down.');
-  const t = Board.TESTS.find(x => x.id === ctx.body.test); if (!t) fail(400, 'Unknown test.');
-  const h = Number(ctx.body.hits);
-  if (Number(ctx.body.n) !== t.n || !Number.isInteger(h) || h < 0 || h > t.n) fail(400, 'That score is not valid for this test.');
-  const last = db.scores.filter(s => s.uid === u.uid && s.test === t.id).reduce((m, s) => Math.max(m, s.at), 0);
-  if (Date.now() - last < (MIN_GAP[t.id] ?? 10) * 1000) fail(429, 'That run finished faster than the test allows. Not posted.');
-  const before = Board.achievements(db.scores.filter(s => s.uid === u.uid), profileExtra(u.uid));
-  const detail = checkDetail(t, h, ctx.body.detail);
-  db.scores.push({ uid: u.uid, test: t.id, hits: h, n: t.n, at: Date.now(), ...(detail ? { detail } : {}) }); save();
-  const after = Board.achievements(db.scores.filter(s => s.uid === u.uid), profileExtra(u.uid));
-  after.forEach((a, i) => { if (a.earned && !before[i].earned) notify(u.uid, { type: 'achievement', text: `Achievement unlocked: ${a.name}. ${a.desc}`, link: 'profile.html#' + u.uid }); });
-  const rows = Board.rank(t.id, db.scores, usersForRank(), 1e6), i = rows.findIndex(r => r.uid === u.uid);
-  return { ok: true, rank: i >= 0 ? i + 1 : null, total: rows.length };
-});
-on('GET', '/api/leaderboard', ctx => {
-  const test = ctx.url.searchParams.get('test'); if (!Board.TESTS.some(x => x.id === test)) fail(400, 'Unknown test.');
-  return { rows: Board.rank(test, db.scores, usersForRank(), 25) };
 });
 
 /* ---- chat rooms ---- */
@@ -335,7 +307,7 @@ on('POST', '/api/rooms/:id/messages', ctx => {
   limit('chat:' + u.uid, 8, 10e3, 'You are sending messages too quickly.');
   const m = { id: newId(), uid: u.uid, text: text(ctx.body.text, 1000, { min: 1, field: 'Message' }), at: Date.now() };
   const list = db.messages[room.id]; list.push(m); if (list.length > ROOM_KEEP) list.splice(0, list.length - ROOM_KEEP);
-  save(); broadcast('msg', { rid: room.id, m: msgOut(m) }); mentions(m.text, u, 'chat.html#' + room.id, '#' + room.title);
+  save(); broadcast('msg', { rid: room.id, m: msgOut(m) }); mentions(m.text, u, 'chat.html#' + room.id, '#' + room.title); award(u);
   return { message: msgOut(m) };
 });
 on('DELETE', '/api/rooms/:id/messages/:mid', ctx => {
@@ -401,7 +373,7 @@ on('POST', '/api/threads', ctx => {
   const u = need(ctx, { post: true }); limit('thread:' + u.uid, 4, 600e3, 'You can start at most 4 threads every 10 minutes.');
   const id = newId(), now = Date.now();
   db.threads[id] = { id, uid: u.uid, title: text(ctx.body.title, 120, { min: 3, field: 'Title', multiline: false }), body: text(ctx.body.body, 10000, { min: 1, field: 'Post' }), at: now, lastAt: now, comments: [] };
-  save(); mentions(db.threads[id].body, u, 'thread.html#' + id, 'a forum thread'); return { thread: threadOut(db.threads[id], true) };
+  save(); mentions(db.threads[id].body, u, 'thread.html#' + id, 'a forum thread'); award(u); return { thread: threadOut(db.threads[id], true) };
 });
 on('GET', '/api/threads/:id', ctx => { const t = db.threads[ctx.params.id]; if (!t) fail(404, 'This thread no longer exists.'); return { thread: threadOut(t, true) }; });
 on('DELETE', '/api/threads/:id', ctx => {
@@ -415,7 +387,7 @@ on('POST', '/api/threads/:id/comments', ctx => {
   t.comments.push(c); t.lastAt = c.at; save();
   const watchers = new Set([t.uid, ...t.comments.map(x => x.uid)]); watchers.delete(u.uid);
   watchers.forEach(w => notify(w, { type: 'comment', text: `${u.name} commented on “${t.title}”`, link: 'thread.html#' + t.id, key: 'thread:' + t.id }));
-  mentions(c.text, u, 'thread.html#' + t.id, 'a forum comment');
+  mentions(c.text, u, 'thread.html#' + t.id, 'a forum comment'); award(u);
   return { comment: msgOut(c) };
 });
 on('DELETE', '/api/threads/:id/comments/:cid', ctx => {
@@ -439,7 +411,7 @@ on('GET', '/api/listings', ctx => {
 on('POST', '/api/listings', ctx => {
   const u = need(ctx, { post: true }); limit('listing:' + u.uid, 6, 3600e3, 'You can post at most 6 listings an hour.');
   for (const f of ['title', 'desc', 'price']) if (ctx.body[f] === undefined) ctx.body[f] = '';
-  const l = { id: newId(), uid: u.uid, at: Date.now(), sold: false }; listingFields(ctx.body, l); db.listings[l.id] = l; save(); return { listing: listingOut(l) };
+  const l = { id: newId(), uid: u.uid, at: Date.now(), sold: false }; listingFields(ctx.body, l); db.listings[l.id] = l; save(); award(u); return { listing: listingOut(l) };
 });
 on('PATCH', '/api/listings/:id', ctx => {
   const u = need(ctx, { post: true }), l = db.listings[ctx.params.id]; if (!l) fail(404, 'Listing not found.');
@@ -459,7 +431,7 @@ on('POST', '/api/pins', ctx => {
   if (Object.values(db.pins).filter(p => p.uid === u.uid).length >= 50) fail(400, 'You can have at most 50 pins. Delete one first.');
   const p = { id: newId(), uid: u.uid, title: text(ctx.body.title, 80, { min: 1, field: 'Title', multiline: false }), desc: text(ctx.body.desc, 1000, { field: 'Description' }),
     lat: coord(ctx.body.lat, 90, 'latitude'), lng: coord(ctx.body.lng, 180, 'longitude'), locked: true, at: Date.now() };
-  db.pins[p.id] = p; save(); broadcast('pin', { action: 'add', pin: pinOut(p) }); return { pin: pinOut(p) };
+  db.pins[p.id] = p; save(); broadcast('pin', { action: 'add', pin: pinOut(p) }); award(u); return { pin: pinOut(p) };
 });
 on('PATCH', '/api/pins/:id', ctx => {
   const u = need(ctx), p = db.pins[ctx.params.id]; if (!p) fail(404, 'Pin not found.');
@@ -493,7 +465,7 @@ on('GET', '/api/geocode', async ctx => {
 on('GET', '/api/admin/users', ctx => {
   need(ctx, { admin: true }); const q = ctx.url.searchParams.get('q');
   return { users: Object.values(db.users).filter(u => matchQ(q, u.name, u.email)).sort((a, b) => b.created - a.created).slice(0, 100)
-    .map(u => ({ ...meView(u), banned: !!u.banned, runs: db.scores.filter(s => s.uid === u.uid).length })) };
+    .map(u => ({ ...meView(u), banned: !!u.banned, posts: Object.values(db.threads).filter(t => t.uid === u.uid).length })) };
 });
 on('POST', '/api/admin/users/:uid', ctx => {
   const me = need(ctx, { admin: true }), u = db.users[ctx.params.uid]; if (!u) fail(404, 'No such user.');

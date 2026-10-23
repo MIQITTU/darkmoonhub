@@ -1,5 +1,5 @@
 /* Darkmoon Hub — neon edition
-   Layout: one narrow column (960px). Home = big buttons; test pages = back link, title, instrument, result.
+   Layout: one narrow column (960px). Home = big buttons and live previews.
    Single dark theme by design: neon reads only on black. */
 :root{
   --bg:#05050b; --bg-2:#0a0a16; --panel:#0c0c1b; --line:#22223f; --ink:#eaf0ff; --muted:#8b90b8;
@@ -84,7 +84,7 @@ textarea{min-height:120px;resize:vertical}
 .field{display:grid;gap:6px}
 .err{color:var(--red);font-size:.95rem}
 
-/* Home test buttons */
+/* Home buttons */
 .tests{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
 .test-btn{display:grid;grid-template-columns:54px 1fr;gap:4px 14px;align-items:center;padding:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel);text-decoration:none;color:var(--ink);transition:border-color .15s,box-shadow .15s,transform .15s}
 .test-btn:hover{border-color:var(--cyan);box-shadow:var(--glow-c);transform:translateY(-2px)}
@@ -104,29 +104,11 @@ textarea{min-height:120px;resize:vertical}
 .pill.hit{color:var(--lime);border-color:var(--lime);box-shadow:0 0 10px rgba(184,255,60,.35)}
 .pill.miss{color:var(--red);border-color:var(--red)}
 .pill.c{color:var(--cyan);border-color:var(--cyan)}
-.verdict{border-left:2px solid var(--mag);padding:4px 0 4px 14px}
-.trail{display:flex;flex-wrap:wrap;gap:4px}
-.trail i{width:14px;height:14px;border-radius:2px;background:var(--line)}
-.trail i.h{background:var(--lime);box-shadow:0 0 6px rgba(184,255,60,.6)} .trail i.m{background:var(--red);opacity:.45}
-.readout{font:400 .9rem/1.7 var(--f-m);background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:12px;white-space:pre-wrap;overflow:auto;max-height:300px}
-
-/* Zener */
-.syms{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
-.sym{width:86px;height:112px;border:1px solid var(--line);border-radius:8px;background:var(--bg-2);color:var(--cyan);display:grid;place-items:center;cursor:pointer;padding:0;transition:border-color .15s,box-shadow .15s,transform .15s}
-.sym:hover:not(:disabled){border-color:var(--cyan);box-shadow:var(--glow-c);transform:translateY(-2px)}
-.sym svg{width:56px;height:56px;filter:drop-shadow(0 0 5px currentColor)}
-.sym:disabled{cursor:default;opacity:.5}
-.cardback{width:120px;height:164px;border-radius:10px;border:1px solid var(--mag);box-shadow:var(--glow-m);display:grid;place-items:center;font:700 2.4rem var(--f-d);color:var(--mag);
-  background:repeating-linear-gradient(45deg,rgba(255,43,214,.12) 0 6px,transparent 6px 12px),var(--bg-2)}
-
-/* Leaderboard */
-.tabs{display:flex;flex-wrap:wrap;gap:8px}
+/* Tables (admin) */
 table.board{border-collapse:collapse;width:100%}
 table.board th,table.board td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left}
 table.board th{font:600 .68rem var(--f-m);text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
 table.board td.n{font-family:var(--f-m);text-align:right;font-variant-numeric:tabular-nums}
-table.board tr.me td{background:rgba(255,43,214,.08)}
-table.board tr:nth-child(1) td.rk{color:var(--gold);text-shadow:0 0 10px rgba(255,210,59,.6)}
 .scroll-x{overflow-x:auto}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel);border:1px solid var(--cyan);box-shadow:var(--glow-c);color:var(--cyan);padding:10px 16px;border-radius:4px;font:600 .82rem var(--f-m);z-index:50}
 .notice{border:1px dashed var(--gold);color:var(--gold);border-radius:6px;padding:10px 14px;font-size:.92rem}
@@ -204,17 +186,6 @@ input[type=search]:focus,input[type=number]:focus,select:focus{border-color:var(
 .tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .tablewrap>table{min-width:600px}
 .empty{color:var(--muted);text-align:center;padding:30px 10px}
-
-/* Test log breakdowns */
-table.log td{vertical-align:middle}
-.xrow td{background:var(--bg-2)}
-.cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(38px,1fr));gap:4px;max-width:560px}
-.cells span{display:grid;place-items:center;border:1px solid var(--line);border-radius:4px;padding:4px 0;font-family:var(--f-m);line-height:1.2}
-.cells b{font-size:1.05rem}.cells small{color:var(--muted);font-size:.8rem}
-.cells .h,.chips .h{border-color:var(--lime);background:rgba(184,255,60,.08);color:var(--lime)}
-.cells .m,.chips .m{opacity:.75}
-.chips{display:flex;flex-wrap:wrap;gap:4px}
-.chips span{border:1px solid var(--line);border-radius:3px;padding:3px 7px;font:600 .8rem var(--f-m)}
 
 /* Children of grid panels may shrink below their content width, so wide tables scroll inside their own box
    instead of widening the page (which makes phones zoom the whole page out). */

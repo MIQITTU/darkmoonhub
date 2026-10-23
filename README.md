@@ -1,6 +1,6 @@
 # Darkmoon Hub
 
-A members' community with psi tests and leaderboards: Google sign-in, chat rooms, direct messages, a notification inbox, member profiles with achievements, a forum, a marketplace, a shared map and an admin panel. Dark neon design, built for phones and desktops.
+A members' community for the unexplained: Google sign-in, chat rooms, direct messages, a notification inbox, member profiles with achievements, a forum, a marketplace, a shared map and an admin panel. Dark neon design, built for phones and desktops.
 
 One Node.js server (`server.js`, Node 18+) serves the site and runs everything. Data is kept in a free Postgres database (Neon) when `DATABASE_URL` is set, or in one file, `data/db.json`, when it isn't. The only package is `pg`, for the database.
 
@@ -63,7 +63,7 @@ The host needs to run Node, keep data (in Postgres or on a disk), and serve over
 - **Railway / Fly.io**: same start command; attach a volume and point `DATA_DIR` at it.
 - **VPS** (Hetzner, DigitalOcean, etc.): run under `pm2` or systemd behind Caddy or Nginx for HTTPS. If you use Nginx, turn proxy buffering off for `/api/stream` so live updates arrive instantly.
 
-Static-only hosts (Netlify, GitHub Pages) can't run the server. The tests would still work there, but nothing else would.
+Static-only hosts (Netlify, GitHub Pages) can't run the server, so they can't host this site.
 
 **Backups:** with Neon, use its built-in restore (history) or run `psql "$DATABASE_URL" -Atc "select v from darkmoon_store" > backup.json`. With file storage, copy `data/db.json`. To restore a file backup, stop the server, replace the file, and start it again.
 
@@ -73,14 +73,11 @@ Static-only hosts (Netlify, GitHub Pages) can't run the server. The tests would 
 
 | Page | What it does |
 |---|---|
-| `index.html` | Community hub: buttons to every area, live previews of the forum, chat rooms, market and map, and the psi tests at the bottom. No landing page. |
-| `tests.html` | All six psi tests and the leaderboard |
-| Tests | Zener ESP, Zener Precognition, Move the Line, Compass Spin, Ball Machine, Remote Viewing |
-| `leaderboard.html` | Top scorers per test; names link to profiles |
+| `index.html` | Community hub: buttons to every area and live previews of the forum, chat rooms, market and map. No landing page. |
 | `chat.html` | Live chat rooms (signed-in members only). `@Name` mentions notify that member. |
 | `dms.html` | Private one-to-one conversations, started from search or any profile |
 | `inbox.html` | Notifications: new DMs, comments on your threads, mentions, achievements, moderation notices. The bell in the header shows the unread count live. |
-| `profile.html#id` | Bio, track record per test (runs, best, total, combined z, run-by-run chart), 13 achievements, threads, listings and pins |
+| `profile.html#id` | Bio, activity counts, 10 community achievements (chat, forum, map, market, membership), threads, listings and pins |
 | `forum.html` / `thread.html` | Threads with comments and search; author names link to profiles |
 | `market.html` | Listings with title, description (where sellers put payment details), price and sold status; search; "Message seller" |
 | `map.html` | Shared map: search places, pin your location or tap the map, add a title and description. Pins are locked when created; unlock to drag, then lock again. Owners and admins can edit or delete. |
@@ -94,10 +91,9 @@ Static-only hosts (Netlify, GitHub Pages) can't run the server. The tests would 
 ## Limits worth knowing
 
 - **Scale:** the single-document database (one Postgres row or one file) suits a community of hundreds of active members. Chat keeps the latest 3,000 messages per room, DMs the latest 2,000 per conversation. For thousands of daily users, move to a real database.
-- **Scores** are computed in the visitor's browser. The server rejects impossible scores and runs finished too quickly, but a technical user could still forge a plausible score.
 - **Payments** happen between members, outside the site. The market shows a reminder to check a seller's profile before paying.
 - **Map tiles and place search** use OpenStreetMap's free public services, which are fine for a community site. Heavy traffic would need a commercial tile provider; the URL is set in `pages/map.html`.
 
 ## Editing
 
-Page bodies live in `pages/`; run `python3 build.py` to regenerate `public/*.html` with the shared header and footer. Styles are in `public/assets/style.css`, shared client code in `public/assets/app.js`, and test definitions plus achievements in `public/assets/board.js`.
+Page bodies live in `pages/`; run `python3 build.py` to regenerate `public/*.html` with the shared header and footer. Styles are in `public/assets/style.css`, shared client code in `public/assets/app.js`.

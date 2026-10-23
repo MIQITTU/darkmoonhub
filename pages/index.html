@@ -1,17 +1,13 @@
-{"title":"Darkmoon Hub","desc":"A community for psi experiences: chat rooms, forum, shared map, market and messages, with psi tests and leaderboards."}
+{"title":"Darkmoon Hub","desc":"A community for the unexplained: chat rooms, forum, shared map, market and private messages."}
 <p class="notice" id="flash" hidden></p>
 <nav class="tests" id="go" aria-label="Community"></nav>
-<p class="notice" id="offline" hidden>The community needs the Darkmoon Hub server, which isn't running here. The psi tests at the bottom of the page still work.</p>
+<p class="notice" id="offline" hidden>The community needs the Darkmoon Hub server, which isn't running here.</p>
 <div class="grid2" id="feeds">
   <section class="panel"><div class="row" style="justify-content:space-between"><h2>Latest in the forum</h2><a class="btn ghost sm" href="forum.html">Forum →</a></div><div id="f-threads" class="list"><p class="muted">Loading…</p></div></section>
   <section class="panel"><div class="row" style="justify-content:space-between"><h2>Chat rooms</h2><a class="btn ghost sm" href="chat.html">Chat →</a></div><div id="f-rooms" class="list"><p class="muted">Loading…</p></div></section>
   <section class="panel"><div class="row" style="justify-content:space-between"><h2>New in the market</h2><a class="btn ghost sm" href="market.html">Market →</a></div><div id="f-market" class="list"><p class="muted">Loading…</p></div></section>
   <section class="panel"><div class="row" style="justify-content:space-between"><h2>Recently pinned</h2><a class="btn ghost sm" href="map.html">Map →</a></div><div id="f-pins" class="list"><p class="muted">Loading…</p></div></section>
 </div>
-<section class="panel" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px">
-  <div style="display:grid;gap:4px;flex:1 1 280px;min-width:0"><span class="lbl neon-m">Psi tests</span><p class="muted">Zener ESP, precognition, psychokinesis, Compass Spin, the Ball Machine and remote viewing, scored against chance.</p></div>
-  <div class="row"><a class="btn" href="tests.html">Psi tests</a><a class="btn ghost" href="leaderboard.html">Leaderboard</a></div>
-</section>
 <script>
 const $=id=>document.getElementById(id);
 const f=UP.ss.get('flash');if(f){UP.ss.del('flash');$('flash').textContent=f;$('flash').hidden=false}
