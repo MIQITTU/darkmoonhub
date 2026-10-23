@@ -2,7 +2,7 @@
 (function(){
 /* ===== Site settings: edit before deploying ===== */
 const CONFIG={
-  DISCORD_URL:'https://disboard.org/server/join/1179591728177623071',   // your Discord invite link
+  DISCORD_URL:'https://discord.gg/EjBhMZPYzN',   // your Discord invite link
   SITE:'Darkmoon Hub'
 };
 
