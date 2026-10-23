@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inbox · Darkmoon Hub</title>
+<meta name="description" content="Your Darkmoon Hub notifications.">
+<meta name="theme-color" content="#05050b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="inbox.html">
+<div id="top"></div>
+<main class="wrap">
+<div class="row" style="justify-content:space-between"><h1 class="neon-m" style="font-size:1.6rem">Inbox</h1><button class="btn ghost" id="all" type="button" hidden>Mark all as read</button></div>
+<div id="app" class="list"></div>
+</main>
+<div id="foot"></div>
+<script src="assets/board.js"></script>
+<script src="assets/app.js"></script>
+<script>
+const app=document.getElementById('app'),ICON={dm:'Message',comment:'Comment',mention:'Mention',achievement:'Achievement',mod:'Moderation'};
+(async()=>{if(!(await UP.gate(app,'Your inbox')))return;await load();UP.on('notif',load)})();
+async function load(){let j;try{j=await UP.api('GET','notifications')}catch(x){app.innerHTML=`<p class="err">${UP.esc(x.message)}</p>`;return}
+  document.getElementById('all').hidden=!j.unread;
+  app.innerHTML=j.notifications.length?j.notifications.map(n=>`<a class="notif ${n.read?'':'unread'}" href="${UP.esc(n.link||'#')}" data-id="${n.id}"><i aria-hidden="true"></i>
+    <div style="display:grid;gap:2px;min-width:0"><span class="lbl">${ICON[n.type]||'Notice'}${n.count>1?` · ${n.count}`:''}</span><span style="overflow-wrap:anywhere">${UP.esc(n.text)}</span></div><span class="ts">${UP.ago(n.at)}</span></a>`).join(''):
+    '<div class="panel empty">Nothing here yet. Messages, comments on your threads, mentions and achievements will show up here.</div>';
+  app.querySelectorAll('[data-id]').forEach(a=>a.addEventListener('click',e=>{if(a.classList.contains('unread')){e.preventDefault();UP.api('POST','notifications/read',{ids:[a.dataset.id]}).finally(()=>location.href=a.getAttribute('href'))}}))}
+document.getElementById('all').onclick=UP.guard(async e=>{await UP.api('POST','notifications/read',{});load()});
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{"title":"Move the Line","desc":"A psychokinesis test: push a live random walk of 2,000 bits upward."}
+<a class="back" href="tests.html">← All tests</a>
+<div style="display:grid;gap:10px"><h1 class="neon-c">Move the Line</h1>
+<p class="sub">A generator produces 2,000 random bits over 20 seconds. Each 1 moves the line up, each 0 moves it down. Left alone, it wanders around the centre. Push it up.</p></div>
+<section class="panel">
+  <canvas id="cv" width="900" height="380" style="width:100%;height:auto;border-radius:6px;background:var(--bg-2)" role="img" aria-label="Live random walk graph"></canvas>
+  <div class="stats" id="live"></div>
+  <div class="row"><button class="btn big" id="go" type="button">Start · 20 seconds</button><span class="muted" id="state">The dashed curves mark the 95% band. Ending above the top curve is significant.</span></div>
+</section>
+<section class="panel" id="result" hidden></section>
+<details class="panel"><summary class="lbl" style="cursor:pointer">How it works</summary>
+  <p class="muted">Each bit is drawn from your browser's cryptographic generator, 100 a second. Your score is the number of ones out of 2,000; chance expects 1,000 with a standard deviation of about 22. Keep your attention on the line and hold the intention for it to rise. Don't strain; most people who score well describe a calm, steady expectation.</p></details>
+<script>
+/* Layered drawing: the grid and 95% band are painted once; the trace is extended by only the new segment each tick.
+   Cost per tick stays constant no matter how long the line gets. */
+const N=2000,cv=document.getElementById('cv'),cx=cv.getContext('2d',{alpha:false}),W=cv.width,H=cv.height,mid=H/2,sx=W/N,sy=(H/2-16)/(2.6*Math.sqrt(N));
+const layer=()=>{const c=document.createElement('canvas');c.width=W;c.height=H;return[c,c.getContext('2d')]};
+const [bg,bx]=layer(),[tr,tx]=layer();
+let bits=[],ones=0,dev=0,lo=0,hi=0,timer=null;
+(function paintBg(){bx.fillStyle='#0a0a16';bx.fillRect(0,0,W,H);bx.strokeStyle='rgba(0,240,255,.08)';bx.lineWidth=1;
+  for(let x=0;x<=W;x+=W/10){bx.beginPath();bx.moveTo(x,0);bx.lineTo(x,H);bx.stroke()}
+  bx.strokeStyle='rgba(139,144,184,.5)';bx.setLineDash([4,6]);bx.beginPath();bx.moveTo(0,mid);bx.lineTo(W,mid);bx.stroke();
+  bx.strokeStyle='rgba(255,43,214,.7)';for(const s of[-1,1]){bx.beginPath();for(let k=0;k<=N;k+=20)bx.lineTo(k*sx,mid+s*1.96*Math.sqrt(k)*sy);bx.stroke()}bx.setLineDash([])})();
+tx.lineJoin=tx.lineCap='round';
+function extend(from){ // draw only bits[from..] onto the trace layer
+  let d=dev,x0=from*sx,y0=mid-d*sy;const pts=[[x0,y0]];
+  for(let k=from;k<bits.length;k++){d+=bits[k]?1:-1;pts.push([(k+1)*sx,mid-d*sy])}
+  for(const [w,c] of[[8,'rgba(0,240,255,.18)'],[2.2,'#00f0ff']]){tx.strokeStyle=c;tx.lineWidth=w;tx.beginPath();tx.moveTo(...pts[0]);pts.slice(1).forEach(p=>tx.lineTo(...p));tx.stroke()}
+  dev=d;for(let k=1;k<pts.length;k++){const v=Math.round((mid-pts[k][1])/sy);if(v<lo)lo=v;if(v>hi)hi=v}}
+const liveEl=document.getElementById('live');liveEl.innerHTML=['Bits','Ones','Deviation','Z'].map(l=>`<div class="stat"><span>${l}</span><b>0</b></div>`).join('');const lv=[...liveEl.querySelectorAll('b')];
+function frame(){cx.drawImage(bg,0,0);cx.drawImage(tr,0,0);
+  if(bits.length){cx.fillStyle='#ff2bd6';cx.beginPath();cx.arc(bits.length*sx,mid-dev*sy,5,0,7);cx.fill()}
+  const n=bits.length,z=n?(ones-n/2)/Math.sqrt(n/4):0;lv[0].textContent=n;lv[1].textContent=ones;lv[2].textContent=(dev>0?'+':'')+dev;lv[3].textContent=z.toFixed(2)}
+document.getElementById('go').onclick=()=>{if(timer)return;bits=[];ones=0;dev=0;lo=0;hi=0;tx.clearRect(0,0,W,H);document.getElementById('result').hidden=true;
+  const b=document.getElementById('go');b.disabled=true;b.textContent='Running…';
+  timer=setInterval(()=>{const from=bits.length;for(let k=0;k<10&&bits.length<N;k++){const x=UP.bit();bits.push(x);ones+=x}extend(from);requestAnimationFrame(frame);
+    document.getElementById('state').textContent=`${((N-bits.length)/100).toFixed(1)} s left`;
+    if(bits.length>=N){clearInterval(timer);timer=null;b.disabled=false;b.textContent='Run again';document.getElementById('state').textContent='Run complete.';
+      UP.result(document.getElementById('result'),'pkline',ones,'',{dev,min:lo,max:hi})}},100)};
+frame();
+</script>

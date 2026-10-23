@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Darkmoon Hub</title>
+<meta name="description" content="A community for psi experiences: chat rooms, forum, shared map, market and messages, with psi tests and leaderboards.">
+<meta name="theme-color" content="#05050b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="index.html">
+<div id="top"></div>
+<main class="wrap">
+<p class="notice" id="flash" hidden></p>
+<nav class="tests" id="go" aria-label="Community"></nav>
+<p class="notice" id="offline" hidden>The community needs the Darkmoon Hub server, which isn't running here. The psi tests at the bottom of the page still work.</p>
+<div class="grid2" id="feeds">
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Latest in the forum</h2><a class="btn ghost sm" href="forum.html">Forum →</a></div><div id="f-threads" class="list"><p class="muted">Loading…</p></div></section>
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Chat rooms</h2><a class="btn ghost sm" href="chat.html">Chat →</a></div><div id="f-rooms" class="list"><p class="muted">Loading…</p></div></section>
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>New in the market</h2><a class="btn ghost sm" href="market.html">Market →</a></div><div id="f-market" class="list"><p class="muted">Loading…</p></div></section>
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Recently pinned</h2><a class="btn ghost sm" href="map.html">Map →</a></div><div id="f-pins" class="list"><p class="muted">Loading…</p></div></section>
+</div>
+<section class="panel" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px">
+  <div style="display:grid;gap:4px;flex:1 1 280px;min-width:0"><span class="lbl neon-m">Psi tests</span><p class="muted">Zener ESP, precognition, psychokinesis, Compass Spin, the Ball Machine and remote viewing, scored against chance.</p></div>
+  <div class="row"><a class="btn" href="tests.html">Psi tests</a><a class="btn ghost" href="leaderboard.html">Leaderboard</a></div>
+</section>
+</main>
+<div id="foot"></div>
+<script src="assets/board.js"></script>
+<script src="assets/app.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const f=UP.ss.get('flash');if(f){UP.ss.del('flash');$('flash').textContent=f;$('flash').hidden=false}
+$('go').innerHTML=[['chat.html','#','Live','Chat','Rooms for members, in real time.'],['forum.html','✎','Discuss','Forum','Post experiences and comment.'],['map.html','◉','Explore','Map','Pin places and sightings.'],
+  ['market.html','$','Trade','Market','Buy, sell and swap.'],['dms.html','✉','Private','Messages','One-to-one conversations.']]
+  .map(([h,g,t,n,d])=>`<a class="test-btn" href="${h}"><span class="g" aria-hidden="true">${g}</span><span class="t">${t}</span><b>${n}</b><small>${d}</small></a>`).join('');
+const empty=(t,h,l)=>`<p class="muted">${t} <a href="${h}">${l}</a></p>`;
+(async()=>{
+  if(!(await UP.connect())){$('offline').hidden=false;$('feeds').hidden=true;return}
+  const me=UP.user();
+  UP.api('GET','threads').then(j=>{const t=j.threads.slice(0,5);$('f-threads').innerHTML=t.length?t.map(x=>`<div style="display:grid;gap:2px"><a class="who-link" href="thread.html#${x.id}">${UP.esc(x.title)}</a><span class="ts">${UP.esc(x.author.name)} · ${x.comments} comment${x.comments===1?'':'s'} · ${UP.ago(x.lastAt)}</span></div>`).join(''):empty('No threads yet.','forum.html','Start the first one.')}).catch(()=>$('f-threads').innerHTML='<p class="muted">Couldn\'t load threads.</p>');
+  UP.api('GET','listings').then(j=>{const l=j.listings.filter(x=>!x.sold).slice(0,4);$('f-market').innerHTML=l.length?l.map(x=>`<div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:10px"><a class="who-link" href="market.html#${x.id}" style="min-width:0">${UP.esc(x.title)}</a><span class="price" style="font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%;flex:0 1 auto">${UP.esc(x.price)}</span></div>`).join(''):empty('Nothing for sale yet.','market.html','Post a listing.')}).catch(()=>$('f-market').innerHTML='<p class="muted">Couldn\'t load listings.</p>');
+  UP.api('GET','pins').then(j=>{const p=j.pins.sort((a,b)=>b.at-a.at).slice(0,5);$('f-pins').innerHTML=p.length?p.map(x=>`<div style="display:grid;gap:2px"><a class="who-link" href="map.html#${x.id}">◉ ${UP.esc(x.title)}</a><span class="ts">${UP.esc(x.author.name)} · ${UP.ago(x.at)}</span></div>`).join(''):empty('No pins yet.','map.html','Pin the first place.')}).catch(()=>$('f-pins').innerHTML='<p class="muted">Couldn\'t load pins.</p>');
+  if(!me){$('f-rooms').innerHTML='<p class="muted">Chat is for members.</p><button class="btn mag" type="button" id="si">Sign in to chat</button>';$('si').onclick=UP.goSignIn;return}
+  UP.api('GET','rooms').then(j=>{$('f-rooms').innerHTML=j.rooms.map(r=>`<a class="who-link" href="chat.html#${r.id}" style="display:grid;gap:2px;text-decoration:none"><span># ${UP.esc(r.title)}</span><span class="ts">${r.count?`${r.count} message${r.count===1?'':'s'} · active ${UP.ago(r.lastAt)}`:'No messages yet'}</span></a>`).join('')}).catch(x=>$('f-rooms').innerHTML=`<p class="muted">${UP.esc(x.message)}</p>`);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{"title":"Messages","desc":"Private messages between Darkmoon Hub members."}
+<div id="app"></div>
+<script>
+/* TRIM: keep at most 400 messages in the page so long sessions stay fast */
+function trimMsgs(box){const ms=box.querySelectorAll('.msg');for(let k=0;k<ms.length-400;k++)ms[k].remove()}
+const app=document.getElementById('app');let me,list=[],cur=null,other=null;
+(async()=>{me=await UP.gate(app,'Messages');if(!me)return;
+  app.innerHTML=`<div class="split"><aside class="side" id="side" aria-label="Conversations">
+      <form id="find" class="stack" style="display:grid;gap:6px"><label class="lbl" for="q">New message to…</label><div class="searchbar"><input type="search" id="q" placeholder="Search members" autocomplete="off"></div></form>
+      <div id="found" class="side"></div><span class="lbl" style="margin-top:8px">Conversations</span><div id="convs" class="side"></div></aside>
+    <section class="panel chatbox" id="thread"><header><div style="display:grid;gap:2px;min-width:0"><h2 id="tt" style="font-size:1.15rem">Messages</h2><span class="muted" id="ts" style="font-size:.9rem">Pick a conversation, or search for a member to start one.</span></div></header>
+      <div class="msgs" id="msgs"></div>
+      <form class="composer" id="send"><textarea id="txt" maxlength="2000" placeholder="Write a message…" aria-label="Message" disabled></textarea><button class="btn" type="submit" disabled id="sb">Send</button></form></section></div>`;
+  let qt;document.getElementById('q').oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>find(e.target.value),250)};document.getElementById('find').onsubmit=e=>e.preventDefault();
+  const txt=document.getElementById('txt');txt.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('send').requestSubmit()}});
+  document.getElementById('send').onsubmit=UP.guard(async e=>{e.preventDefault();const t=txt.value.trim();if(!t||!cur)return;txt.disabled=true;try{await UP.api('POST',`dms/${cur}/messages`,{text:t});txt.value=''}catch(x){UP.toast(x.message)}txt.disabled=false;txt.focus()});
+  UP.on('dm',d=>{if(d.id===cur){add(d.m);UP.api('POST',`dms/${cur}/read`).catch(()=>{})}loadList()});
+  await loadList();
+  const h=location.hash.slice(1);if(h.startsWith('u-'))startWith(h.slice(2));else if(h)openDm(h);else if(innerWidth>820&&list[0])openDm(list[0].id);
+})();
+async function find(q){const box=document.getElementById('found');if(q.trim().length<1){box.innerHTML='';return}
+  try{const u=(await UP.api('GET','users?q='+encodeURIComponent(q))).users.filter(x=>x.uid!==me.uid);
+    box.innerHTML=u.length?u.map(x=>`<button type="button" data-u="${x.uid}"><b>${UP.esc(x.name)}</b><small>Start a conversation</small></button>`).join(''):'<small class="muted">No members match.</small>';
+    box.querySelectorAll('[data-u]').forEach(b=>b.onclick=()=>startWith(b.dataset.u))}catch(x){box.innerHTML=`<small class="err">${UP.esc(x.message)}</small>`}}
+async function startWith(uid){try{const j=await UP.api('POST','dms',{uid});document.getElementById('found').innerHTML='';document.getElementById('q').value='';openDm(j.id)}catch(x){UP.toast(x.message)}}
+async function loadList(){try{list=(await UP.api('GET','dms')).dms}catch(x){return}
+  document.getElementById('convs').innerHTML=list.length?list.map(d=>`<button type="button" class="${d.id===cur?'act':''}" data-d="${d.id}"><b>${UP.esc(d.other.name)}${d.unread&&d.id!==cur?`<span class="dot">${d.unread}</span>`:''}</b><small>${d.last?(d.last.mine?'You: ':'')+UP.esc(d.last.text):''}</small></button>`).join(''):'<small class="muted">No conversations yet.</small>';
+  document.querySelectorAll('#convs [data-d]').forEach(b=>b.onclick=()=>openDm(b.dataset.d))}
+async function openDm(id){try{const j=await UP.api('GET','dms/'+id);cur=id;other=j.other;try{history.replaceState(null,'','#'+id)}catch(e){}
+  document.getElementById('tt').innerHTML=UP.who(other);document.getElementById('ts').textContent='Private conversation';
+  const box=document.getElementById('msgs');box.innerHTML='';j.messages.forEach(add);if(!j.messages.length)box.innerHTML='<p class="empty" id="none">Say hello.</p>';box.scrollTop=box.scrollHeight;
+  const t=document.getElementById('txt');t.disabled=me.mutedUntil>Date.now();document.getElementById('sb').disabled=t.disabled;if(!t.disabled&&innerWidth>820)t.focus();
+  await UP.api('POST',`dms/${id}/read`);loadList();if(innerWidth<=820)document.getElementById('thread').scrollIntoView({behavior:'smooth'})}catch(x){UP.toast(x.message)}}
+function add(m){const box=document.getElementById('msgs');document.getElementById('none')?.remove();if(document.getElementById('m-'+m.id))return;const el=document.createElement('div');el.id='m-'+m.id;el.className='msg'+(m.uid===me.uid?' mine':'');
+  el.innerHTML=`<div class="meta"><b>${m.uid===me.uid?'You':UP.esc(m.author.name)}</b><span class="ts" title="${new Date(m.at).toLocaleString()}">${UP.ago(m.at)}</span></div><div class="body">${UP.rich(m.text)}</div>`;box.appendChild(el);trimMsgs(box);box.scrollTop=box.scrollHeight}
+</script>

@@ -1,0 +1,9 @@
+{"title":"Psi tests","desc":"Six psi tests scored against chance: Zener ESP, precognition, Move the Line, Compass Spin, Ball Machine and Remote Viewing."}
+<a class="back" href="index.html">← Home</a>
+<div class="row" style="justify-content:space-between"><div style="display:grid;gap:6px"><h1 class="neon-c" style="font-size:1.8rem">Psi tests</h1>
+  <p class="sub">Six tests scored against pure chance. Every target comes from cryptographic randomness, and every run is logged on your profile.</p></div>
+  <a class="btn mag" href="leaderboard.html">Leaderboard</a></div>
+<nav class="tests" id="tests" aria-label="Tests"></nav>
+<script>
+document.getElementById('tests').innerHTML=Board.TESTS.map(t=>`<a class="test-btn" href="${t.file}"><span class="g" aria-hidden="true">${t.glyph}</span><span class="t">${t.tag}</span><b>${t.name}</b><small>${t.desc}</small></a>`).join('');
+</script>

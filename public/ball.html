@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ball Machine · Darkmoon Hub</title>
+<meta name="description" content="A PK gambling machine: bet on a side and will the ball through nine rows of random pegs.">
+<meta name="theme-color" content="#05050b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="ball.html">
+<div id="top"></div>
+<main class="wrap">
+<a class="back" href="tests.html">← All tests</a>
+<div style="display:grid;gap:10px"><h1 class="neon-c">Ball Machine</h1>
+<p class="sub">You start with 100 credits and 20 balls. Pick a side before each drop. Every peg sends the ball left or right at random. If it lands on your side you win 10 credits; if not, you lose 10.</p></div>
+<section class="panel">
+  <div class="stats" id="hud"></div>
+  <canvas id="cv" width="600" height="470" style="width:100%;max-width:600px;height:auto;justify-self:center;border-radius:8px;background:var(--bg-2)" role="img" aria-label="Ball machine with pegs and bins"></canvas>
+  <div class="row center"><button class="btn" id="L" type="button">← Bet left</button><button class="btn mag" id="R" type="button">Bet right →</button></div>
+  <div class="row center"><button class="btn big" id="drop" type="button">Drop ball</button><button class="btn ghost" id="new" type="button">New game</button></div>
+  <div class="trail" id="trail" style="justify-content:center"></div>
+</section>
+<section class="panel" id="result" hidden></section>
+<details class="panel"><summary class="lbl" style="cursor:pointer">How it works</summary>
+  <p class="muted">The ball passes nine rows of pegs, and at each one a cryptographic random bit sends it left or right. It lands in one of ten bins: the five on the left or the five on the right. The odds are exactly even, so a machine left to chance ends the game near 100 credits. Your leaderboard score is the number of balls that landed on your side.</p></details>
+</main>
+<div id="foot"></div>
+<script src="assets/board.js"></script>
+<script src="assets/app.js"></script>
+<script>
+const N=20,ROWS=9,BET=10,cv=document.getElementById('cv'),cx=cv.getContext('2d',{alpha:false}),$=id=>document.getElementById(id);
+let side=-1,i,wins,credits,bins,busy=false,last=null,bets=[],lands=[];
+function hud(){$('hud').innerHTML=`<div class="stat"><span>Credits</span><b style="color:var(--gold);text-shadow:0 0 10px rgba(255,210,59,.5)">${credits}</b></div><div class="stat"><span>Balls left</span><b>${N-i}</b></div><div class="stat"><span>Wins</span><b>${wins}</b></div><div class="stat"><span>Your side</span><b>${side<0?'LEFT':'RIGHT'}</b></div>`;
+  $('L').classList.toggle('on',side<0);$('R').classList.toggle('on',side>0);$('drop').disabled=busy||i>=N}
+const bg=document.createElement('canvas');bg.width=cv.width;bg.height=cv.height;const bx=bg.getContext('2d');let bgDirty=true;
+function paintBoard(){const W=bg.width,H=bg.height,c=bx;c.fillStyle='#0a0a16';c.fillRect(0,0,W,H);
+  c.fillStyle=side<0?'rgba(0,240,255,.10)':'rgba(255,43,214,.10)';side<0?c.fillRect(0,H-110,W/2,110):c.fillRect(W/2,H-110,W/2,110);
+  c.strokeStyle='rgba(255,255,255,.18)';c.beginPath();c.moveTo(W/2,H-110);c.lineTo(W/2,H);c.stroke();
+  for(let r=0;r<ROWS;r++)for(let k=0;k<=r;k++){const x=W/2+(k-r/2)*46,y=40+r*34,col=(r+k)%2?'0,240,255':'255,43,214';
+    c.fillStyle=`rgba(${col},.22)`;c.beginPath();c.arc(x,y,9,0,7);c.fill();c.fillStyle=`rgb(${col})`;c.beginPath();c.arc(x,y,4,0,7);c.fill()}
+  const mx=Math.max(4,...bins);bins.forEach((b,k)=>{const x=W/2+(k-ROWS/2)*46,h=b/mx*80;c.fillStyle=k<5?'rgba(0,240,255,.7)':'rgba(255,43,214,.7)';c.fillRect(x-15,H-6-h,30,h);
+    if(last===k){c.strokeStyle='#ffd23b';c.lineWidth=2;c.strokeRect(x-17,H-8-h,34,h+4);c.lineWidth=1}});
+  c.font='600 13px JetBrains Mono, monospace';c.fillStyle='#8b90b8';c.fillText('LEFT',14,H-88);c.fillText('RIGHT',W-62,H-88);bgDirty=false}
+function draw(ball){if(bgDirty)paintBoard();cx.drawImage(bg,0,0);
+  if(ball){cx.fillStyle='rgba(255,210,59,.25)';cx.beginPath();cx.arc(ball.x,ball.y,17,0,7);cx.fill();cx.fillStyle='#ffd23b';cx.beginPath();cx.arc(ball.x,ball.y,10,0,7);cx.fill()}}
+function newGame(){bets=[];lands=[];bgDirty=true;i=0;wins=0;credits=100;bins=new Array(ROWS+1).fill(0);last=null;$('trail').innerHTML='';$('result').hidden=true;draw();hud()}
+function drop(){if(busy||i>=N)return;busy=true;hud();const steps=Array.from({length:ROWS},()=>UP.bit());const k=steps.reduce((a,b)=>a+b,0);
+  const W=cv.width,pts=[{x:W/2,y:6}];let pos=0;steps.forEach((s,r)=>{pos+=s?.5:-.5;pts.push({x:W/2+pos*46,y:40+r*34+18})});pts.push({x:W/2+pos*46,y:cv.height-30});
+  let t=0;const sp=matchMedia('(prefers-reduced-motion: reduce)').matches?1:0.22;
+  (function f(){t+=sp;const a=Math.floor(t);if(a>=pts.length-1){bins[k]++;last=k;bgDirty=true;const land=k>=5?1:-1,hit=land===side;bets.push(side);lands.push(k);if(hit){wins++;credits+=BET}else credits-=BET;i++;
+      $('trail').insertAdjacentHTML('beforeend',`<i class="${hit?'h':'m'}"></i>`);busy=false;draw();hud();
+      if(i>=N)UP.result($('result'),'ball',wins,`<div class="stat"><span>Credits</span><b style="color:var(--gold)">${credits}</b></div>`,{s:bets.slice(),b:lands.slice()});return}
+    const p=pts[a],q=pts[a+1],u=t-a;draw({x:p.x+(q.x-p.x)*u,y:p.y+(q.y-p.y)*u});requestAnimationFrame(f)})()}
+$('L').onclick=()=>{if(!busy){side=-1;bgDirty=true;draw();hud()}};$('R').onclick=()=>{if(!busy){side=1;bgDirty=true;draw();hud()}};$('drop').onclick=drop;$('new').onclick=()=>{if(!busy)newGame()};
+newGame();
+</script>
+</body>
+</html>

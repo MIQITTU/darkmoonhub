@@ -1,0 +1,61 @@
+{"title":"Remote Viewing","desc":"Remote viewing experimenter: a target is sealed with a cryptographic commitment, described, then judged blind against decoys.","scripts":["scenes.js"]}
+<a class="back" href="tests.html">← All tests</a>
+<div style="display:grid;gap:10px"><h1 class="neon-m">Remote Viewing</h1>
+<p class="sub">A target scene is chosen at random and sealed before you begin. Describe it, then rank four candidates by how well they match. Ranking the true target first is a direct hit; chance is one in four.</p></div>
+<section class="panel" aria-live="polite">
+  <div class="row" style="justify-content:space-between"><span class="lbl" id="sid"></span><span class="pill c" id="step"></span></div>
+  <p class="mono muted" style="font-size:.8rem;word-break:break-all" id="seal"></p>
+  <div id="p1" style="display:grid;gap:12px">
+    <p class="muted">Write shapes, colours, textures, temperature and sounds. Avoid naming things too early. Sketch if it helps.</p>
+    <textarea id="notes" placeholder="tall… cold… pointed… white at the top… open air…" aria-label="Your impressions"></textarea>
+    <canvas id="sk" width="700" height="260" style="width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:var(--bg-2);touch-action:none" aria-label="Sketch pad"></canvas>
+    <div class="row"><button class="btn ghost" id="clr" type="button">Clear sketch</button><button class="btn big" id="lock" type="button">Lock impressions</button></div>
+  </div>
+  <div id="p2" style="display:grid;gap:12px" hidden>
+    <p class="muted">Tap the scenes from best match to worst. The first one you tap is rank 1.</p>
+    <div id="cands" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px"></div>
+    <div class="row"><button class="btn ghost" id="undo" type="button">Reset ranking</button><button class="btn mag big" id="reveal" type="button" disabled>Reveal target</button></div>
+  </div>
+  <div id="p3" style="display:grid;gap:12px" hidden></div>
+</section>
+<section class="panel" id="hist"></section>
+<details class="panel"><summary class="lbl" style="cursor:pointer">Running it as an experimenter</summary>
+  <p class="muted">For a stricter session, the experimenter starts the session and reads the seal aloud or writes it down, then leaves the room or stays silent. The viewer records impressions and does the ranking. On reveal, the page shows the secret salt and target, so anyone can recompute the SHA-256 seal and confirm the target wasn't changed after the fact. The leaderboard ranks viewers by direct hits across all their sessions, with at least 3 sessions to qualify.</p></details>
+<script>
+const $=id=>document.getElementById(id);let target,cands,order,salt,sid;
+const cv=$('sk'),g=cv.getContext('2d');let dr=false,lastPt=null;
+const pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height]};
+/* Each finger movement draws only the newest segment, so cost stays constant however long the sketch gets */
+cv.onpointerdown=e=>{dr=true;lastPt=pos(e);try{cv.setPointerCapture(e.pointerId)}catch(x){}};
+cv.onpointermove=e=>{if(!dr)return;const p=pos(e);g.lineCap='round';
+  g.strokeStyle='rgba(0,240,255,.22)';g.lineWidth=8;g.beginPath();g.moveTo(...lastPt);g.lineTo(...p);g.stroke();
+  g.strokeStyle='#00f0ff';g.lineWidth=2.5;g.beginPath();g.moveTo(...lastPt);g.lineTo(...p);g.stroke();lastPt=p};
+cv.onpointerup=cv.onpointercancel=()=>{dr=false;lastPt=null};$('clr').onclick=()=>g.clearRect(0,0,cv.width,cv.height);
+async function sha(s){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return'(seal unavailable in this browser)'}}
+async function session(){cands=UP.shuffle(SCENES).slice(0,4);target=cands[UP.rint(4)];order=[];
+  salt=Array.from(crypto.getRandomValues(new Uint8Array(8))).map(x=>x.toString(16).padStart(2,'0')).join('');
+  sid='RV-'+salt.slice(0,6).toUpperCase();$('sid').textContent='Session '+sid;$('step').textContent='1 · Impressions';
+  $('seal').textContent='Seal (SHA-256 of target + salt): '+await sha(target.id+':'+salt);
+  $('p1').hidden=false;$('p2').hidden=true;$('p3').hidden=true;$('notes').value='';g.clearRect(0,0,cv.width,cv.height)}
+function drawC(){$('cands').innerHTML=cands.map((c,k)=>{const r=order.indexOf(k);return`<button type="button" data-k="${k}" style="position:relative;padding:4px;border:1px solid ${r>=0?'var(--cyan)':'var(--line)'};border-radius:8px;background:var(--bg-2);cursor:pointer;box-shadow:${r>=0?'var(--glow-c)':'none'}">${c.svg}${r>=0?`<span class="pill c" style="position:absolute;top:10px;left:10px;background:#05050b">Rank ${r+1}</span>`:''}</button>`}).join('');
+  document.querySelectorAll('#cands button').forEach(b=>b.onclick=()=>{const k=+b.dataset.k;if(!order.includes(k))order.push(k);if(order.length===3)order.push([0,1,2,3].find(x=>!order.includes(x)));drawC()});
+  $('reveal').disabled=order.length<4}
+$('lock').onclick=()=>{$('p1').hidden=true;$('p2').hidden=false;$('step').textContent='2 · Blind judging';drawC()};
+$('undo').onclick=()=>{order=[];drawC()};
+$('reveal').onclick=UP.guard(async e=>{const rank=order.indexOf(cands.indexOf(target))+1,hit=rank===1;$('p2').hidden=true;$('p3').hidden=false;$('step').textContent='3 · Feedback';
+  const log=UP.ls.get('rv',[]);log.unshift({sid,t:target.name,rank,at:Date.now()});UP.ls.set('rv',log.slice(0,200));
+  const notes=$('notes').value.trim();
+  $('p3').innerHTML=`<div style="max-width:520px">${target.svg}</div><h2>${target.name}</h2>
+    <p>You ranked the target <span class="pill ${hit?'hit':'miss'}">${hit?'#1 · direct hit':'#'+rank}</span></p>
+    <p class="muted">Key features: ${target.tags}.</p>${notes?`<pre class="readout">${UP.esc(notes)}</pre>`:''}
+    <p class="mono muted" style="font-size:.8rem;word-break:break-all">Verify: SHA-256("${target.id}:${salt}")</p><div id="post" class="row"><span class="muted">Posting…</span></div>
+    <button class="btn big" id="again" type="button" style="justify-self:start">New session</button>`;
+  $('again').onclick=()=>{session();hist()};
+  const r=await UP.submit('remote',hit?1:0,{rank,target:target.name,sid}),p=$('post');
+  p.innerHTML=r.ok?`<span class="pill hit">Logged</span><span class="muted">${r.rank?`Leaderboard position #${r.rank} of ${r.total}.`:'Logged. Three sessions are needed to appear on the leaderboard.'}</span>`:
+    r.reason==='signin'?`<span class="muted">Sign in to count this session toward the leaderboard.</span><button class="btn mag" type="button" onclick="UP.goSignIn()">Sign in</button>`:`<span class="err">${UP.esc(r.reason)}</span>`;hist()});
+function hist(){const log=UP.ls.get('rv',[]);if(!log.length){$('hist').innerHTML='<h2>Your sessions</h2><p class="muted">Sessions on this device appear here. Chance gives one direct hit in four and an average rank of 2.5.</p>';return}
+  const n=log.length,h=log.filter(x=>x.rank===1).length,mr=log.reduce((a,x)=>a+x.rank,0)/n,s=UP.stats(h,n,.25);
+  $('hist').innerHTML=`<h2>Your sessions</h2><div class="stats"><div class="stat"><span>Sessions</span><b>${n}</b></div><div class="stat"><span>Direct hits</span><b>${h}</b></div><div class="stat"><span>Mean rank</span><b>${mr.toFixed(2)}</b></div><div class="stat"><span>Z</span><b>${s.z.toFixed(2)}</b></div><div class="stat"><span>${s.below?'Chance of this low':'Chance of this high'}</span><b>${UP.fmtP(s.tail)}</b></div></div><p class="verdict">${UP.verdict(s)}</p>`}
+session();hist();
+</script>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in · Darkmoon Hub</title>
+<meta name="description" content="Sign in to Darkmoon Hub with Google.">
+<meta name="theme-color" content="#05050b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="signin.html">
+<div id="top"></div>
+<main class="wrap">
+<section class="panel" style="max-width:520px;width:100%;justify-self:center;justify-items:center;text-align:center;padding-block:36px" id="box">
+  <h1 class="neon-c" style="font-size:2rem">Sign in</h1>
+  <p class="muted">Checking the server…</p>
+</section>
+</main>
+<div id="foot"></div>
+<script src="assets/board.js"></script>
+<script src="assets/app.js"></script>
+<script>
+const box=document.getElementById('box');
+async function done(j){UP.setSession(j);const p=await UP.postPending();if(p)UP.ss.set('flash',`Your ${Board.TESTS.find(t=>t.id===p.test).name} score of ${p.hits} was posted.`);UP.afterSignIn()}
+(async()=>{
+  const ok=await UP.connect(),u=UP.user();
+  if(u&&ok){box.innerHTML=`<h1 class="neon-c" style="font-size:2rem">Signed in</h1><p class="muted">You're signed in as <b>${UP.esc(u.name)}</b>.</p><div class="row center"><a class="btn" href="profile.html#${UP.esc(u.uid)}">Your profile</a><button class="btn ghost" id="out" type="button">Sign out</button></div>`;
+    document.getElementById('out').onclick=UP.guard(async e=>{await UP.signOut();location.reload()});return}
+  if(!ok){box.innerHTML=`<h1 class="neon-c" style="font-size:2rem">Sign in</h1><p class="notice">Accounts need the Darkmoon Hub server, which isn't running here. You can still take every test; scores are kept in this browser.</p><a class="btn" href="index.html">Back to the site</a>`;return}
+  const i=UP.info();
+  box.innerHTML=`<h1 class="neon-c" style="font-size:2rem">Sign in</h1>
+    <p class="muted">Sign in to post scores to the leaderboard, chat, message other members, and post in the forum, market and map.</p>
+    <div id="g" style="min-height:44px;display:grid;place-items:center"></div><p class="err" id="err" hidden></p>
+    ${i.dev?`<details style="width:100%;text-align:left"><summary class="lbl" style="cursor:pointer">Test sign-in (enabled on this server)</summary>
+      <form id="dev" style="display:grid;gap:10px;margin-top:12px" novalidate><div class="field"><label class="lbl" for="dn">Display name</label><input type="text" id="dn" maxlength="24"></div>
+      <div class="field"><label class="lbl" for="de">Email</label><input type="email" id="de"></div><button class="btn" type="submit">Enter</button></form></details>`:''}
+    <p class="muted" style="font-size:.85rem">We store your Google name and email to identify your account. Your email is never shown to other members.</p>`;
+  const err=m=>{const e=document.getElementById('err');e.hidden=!m;e.textContent=m||''};
+  if(i.google){const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;
+    s.onload=()=>{google.accounts.id.initialize({client_id:i.google,callback:async r=>{err('');try{await done(await UP.api('POST','auth/google',{credential:r.credential}))}catch(x){err(x.message)}}});
+      google.accounts.id.renderButton(document.getElementById('g'),{theme:'filled_black',size:'large',shape:'pill',text:'signin_with',width:280})};
+    s.onerror=()=>err('Google sign-in could not load. Check your connection or any content blocker, then reload.');document.head.appendChild(s)}
+  else document.getElementById('g').innerHTML='<p class="notice">Google sign-in isn\'t configured on this server yet. The administrator needs to set GOOGLE_CLIENT_ID.</p>';
+  const dev=document.getElementById('dev');if(dev)dev.onsubmit=UP.guard(async e=>{e.preventDefault();err('');try{await done(await UP.api('POST','auth/dev',{name:document.getElementById('dn').value,email:document.getElementById('de').value}))}catch(x){err(x.message)}});
+})();
+</script>
+</body>
+</html>

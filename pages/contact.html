@@ -1,0 +1,14 @@
+{"title":"Contact","desc":"Reach the administrator of Darkmoon Hub."}
+<a class="back" href="index.html">← Home</a>
+<section class="panel" style="justify-items:center;text-align:center;padding-block:48px;gap:22px">
+  <span class="lbl neon-m">Transmission</span>
+  <h1 class="neon-c" style="font-size:clamp(1.8rem,5vw,2.6rem)">The administrator does not read email.</h1>
+  <p class="sub" style="font-size:1.15rem">To show results. To impress. To voice concerns, or ideas that should not wait.<br>There is one channel, and it is always open.</p>
+  <div id="door"></div>
+  <p class="mono muted" style="font-size:.78rem;letter-spacing:.14em">BRING YOUR SCORES · BRING YOUR SEAL CODES · BRING PROOF</p>
+</section>
+<script>
+const url=UP.CONFIG.DISCORD_URL,door=document.getElementById('door');
+door.innerHTML=/YOUR-INVITE/.test(url)?'<p class="notice">The channel has not been opened yet. Set the Discord invite link in assets/app.js.</p>':
+  `<a class="btn mag big" href="${UP.esc(url)}" target="_blank" rel="noopener">Enter the Discord</a><p class="mono muted" style="margin-top:12px;font-size:.85rem;word-break:break-all">${UP.esc(url)}</p>`;
+</script>

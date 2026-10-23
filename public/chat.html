@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chat · Darkmoon Hub</title>
+<meta name="description" content="Live chat rooms for Darkmoon Hub members.">
+<meta name="theme-color" content="#05050b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="chat.html">
+<div id="top"></div>
+<main class="wrap">
+<div id="app"></div>
+</main>
+<div id="foot"></div>
+<script src="assets/board.js"></script>
+<script src="assets/app.js"></script>
+<script>
+/* TRIM: keep at most 400 messages in the page so long sessions stay fast */
+function trimMsgs(box){const ms=box.querySelectorAll('.msg');for(let k=0;k<ms.length-400;k++)ms[k].remove()}
+const app=document.getElementById('app');let me,rooms=[],cur=null,unreadRooms=new Set(),oldest=Infinity;
+(async()=>{me=await UP.gate(app,'Chat');if(!me)return;me=(await UP.refreshMe())||me;
+  app.innerHTML=`<div class="split"><aside class="side rooms" id="rooms" aria-label="Rooms"></aside>
+    <div style="display:grid;gap:10px;min-width:0"><div class="mobile-pick"><label class="lbl" for="pick">Room</label><select id="pick"></select></div>
+    <section class="panel chatbox"><header><div style="display:grid;gap:2px;min-width:0"><h2 id="rt" style="font-size:1.15rem"></h2><span class="muted" id="rd" style="font-size:.9rem"></span></div></header>
+      <div class="msgs" id="msgs" aria-live="polite"></div>
+      <form class="composer" id="send"><textarea id="txt" maxlength="1000" placeholder="Message… (Enter to send, Shift+Enter for a new line)" aria-label="Message"></textarea><button class="btn" type="submit">Send</button></form>
+    </section></div></div>`;
+  document.getElementById('pick').onchange=e=>openRoom(e.target.value);
+  const txt=document.getElementById('txt');
+  txt.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('send').requestSubmit()}});
+  document.getElementById('send').onsubmit=UP.guard(async e=>{e.preventDefault();const t=txt.value.trim();if(!t||!cur)return;txt.disabled=true;
+    try{await UP.api('POST',`rooms/${cur}/messages`,{text:t});txt.value=''}catch(x){UP.toast(x.message)}txt.disabled=false;txt.focus()});
+  if(me.mutedUntil>Date.now()){txt.disabled=true;txt.placeholder=`You are muted until ${new Date(me.mutedUntil).toLocaleString()}.`}
+  UP.on('msg',d=>{if(d.rid===cur){add(d.m,true)}else{unreadRooms.add(d.rid);drawRooms()}});
+  UP.on('msg-del',d=>{if(d.rid===cur)document.getElementById('m-'+d.id)?.remove()});
+  UP.on('rooms',()=>loadRooms());
+  await loadRooms();
+})();
+async function loadRooms(){try{rooms=(await UP.api('GET','rooms')).rooms}catch(x){UP.toast(x.message);return}
+  const want=location.hash.slice(1);if(!cur||!rooms.some(r=>r.id===cur))openRoom(rooms.some(r=>r.id===want)?want:rooms[0]?.id);else drawRooms()}
+function drawRooms(){document.getElementById('rooms').innerHTML=rooms.map(r=>`<button type="button" class="${r.id===cur?'act':''}" data-r="${r.id}"><b># ${UP.esc(r.title)}${unreadRooms.has(r.id)?'<span class="dot">new</span>':''}</b><small>${UP.esc(r.desc||'')}</small></button>`).join('');
+  document.querySelectorAll('#rooms [data-r]').forEach(b=>b.onclick=()=>openRoom(b.dataset.r));
+  document.getElementById('pick').innerHTML=rooms.map(r=>`<option value="${r.id}" ${r.id===cur?'selected':''}># ${UP.esc(r.title)}${unreadRooms.has(r.id)?' •':''}</option>`).join('')}
+async function openRoom(id){if(!id)return;cur=id;unreadRooms.delete(id);try{history.replaceState(null,'','#'+id)}catch(e){}
+  const r=rooms.find(x=>x.id===id);document.getElementById('rt').textContent='# '+r.title;document.getElementById('rd').textContent=r.desc||'';drawRooms();
+  const box=document.getElementById('msgs');box.innerHTML='<p class="empty">Loading…</p>';oldest=Infinity;
+  try{const j=await UP.api('GET',`rooms/${id}/messages`);if(cur!==id)return;box.innerHTML='';
+    if(j.more)moreBtn();j.messages.forEach(m=>add(m,false));if(!j.messages.length)box.innerHTML='<p class="empty" id="none">No messages yet. Say something.</p>';box.scrollTop=box.scrollHeight}
+  catch(x){box.innerHTML=`<p class="err">${UP.esc(x.message)}</p>`}}
+function moreBtn(){const box=document.getElementById('msgs');const b=document.createElement('button');b.className='btn ghost sm';b.type='button';b.textContent='Load earlier messages';b.style.alignSelf='center';b.id='more';
+  b.onclick=UP.guard(async e=>{const j=await UP.api('GET',`rooms/${cur}/messages?before=${oldest}`);b.remove();const h=box.scrollHeight;const frag=j.messages.map(render);const first=box.firstChild;frag.forEach(el=>box.insertBefore(el,first));if(j.more)moreBtn();box.scrollTop=box.scrollHeight-h});box.prepend(b)}
+function render(m){oldest=Math.min(oldest,m.at);const el=document.createElement('div');const mine=m.uid===me.uid,ment=!mine&&m.text.toLowerCase().includes('@'+me.name.toLowerCase());
+  el.className='msg'+(mine?' mine':'')+(ment?' mention':'');el.id='m-'+m.id;
+  el.innerHTML=`<div class="meta">${UP.who(m.author)}<span class="ts" title="${new Date(m.at).toLocaleString()}">${UP.ago(m.at)}</span></div><div class="body">${UP.rich(m.text)}</div>
+    <div class="tools">${mine||me.role==='admin'?'<button class="btn ghost sm" data-a="del" type="button" aria-label="Delete message">Delete</button>':''}${me.role==='admin'&&!mine?'<button class="btn ghost sm" data-a="mute" type="button">Mute 1h</button><button class="btn ghost sm" data-a="ban" type="button">Ban</button>':''}</div>`;
+  const q=a=>el.querySelector(`[data-a="${a}"]`);
+  if(q('del'))UP.confirmBtn(q('del'),'Confirm',async()=>{await UP.api('DELETE',`rooms/${cur}/messages/${m.id}`);el.remove()});
+  if(q('mute'))UP.confirmBtn(q('mute'),'Confirm mute',async()=>{await UP.api('POST',`admin/users/${m.uid}`,{action:'mute',minutes:60});UP.toast(`${m.author.name} muted for 1 hour`);q('mute').disabled=false});
+  if(q('ban'))UP.confirmBtn(q('ban'),'Confirm ban',async()=>{await UP.api('POST',`admin/users/${m.uid}`,{action:'ban'});UP.toast(`${m.author.name} banned`)});
+  return el}
+function add(m,live){const box=document.getElementById('msgs');document.getElementById('none')?.remove();if(document.getElementById('m-'+m.id))return;
+  const near=box.scrollHeight-box.scrollTop-box.clientHeight<120;box.appendChild(render(m));if(near)trimMsgs(box);if(!live||near||m.uid===me.uid)box.scrollTop=box.scrollHeight}
+</script>
+</body>
+</html>

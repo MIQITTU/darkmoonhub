@@ -1,0 +1,70 @@
+{"title":"Profile","desc":"Achievements and track record of an Darkmoon Hub member."}
+<div id="app"><p class="empty">Loading…</p></div>
+<script>
+/* ===== Test log: every run with its exact result and breakdown ===== */
+const ZS=['○','+','≈','□','☆'],ZN=['Circle','Cross','Waves','Square','Star'];let logShown=30;
+function breakdown(r){const d=r.detail;if(!d)return'<p class="muted">No breakdown was recorded for this run.</p>';
+  if(r.test==='esp'||r.test==='precog')return`<div class="cells">${[...d.g].map((g,i)=>`<span class="${g===d.t[i]?'h':'m'}" title="Card ${i+1}: guessed ${ZN[g]}, target was ${ZN[d.t[i]]}"><b>${ZS[g]}</b><small>${ZS[d.t[i]]}</small></span>`).join('')}</div><p class="ts">Each card: your guess on top, the actual target below. Green = hit.</p>`;
+  if(r.test==='compass'&&d.bits){const pts=[];let n=0;pts.push(0);
+    for(let k=0;k<r.n;k++){const b=(parseInt(d.bits[k>>2],16)>>(3-(k&3)))&1;n+=b?1:-1;if(k%10===9||k===r.n-1)pts.push(n)}
+    const W=560,H=120,mx=Math.max(20,Math.abs(d.min),Math.abs(d.max)),x=i=>i/(pts.length-1)*W,y=v=>H/2-v/mx*(H/2-8),deg=v=>`${v>0?'+':v<0?'−':''}${Math.abs(v*1.5).toFixed(1)}°`;
+    return`<p class="ts">Aimed ${d.dir===1?'clockwise ↻':'counter-clockwise ↺'}. ${r.hits} of ${r.n} pushes went your way. Needle path over the 20 seconds (up = clockwise):</p>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:560px;height:auto" role="img" aria-label="Needle angle over the spin"><line x1="0" x2="${W}" y1="${H/2}" y2="${H/2}" stroke="#3a3a66" stroke-dasharray="4 4"/>
+      <polyline fill="none" stroke="${n*d.dir>0?'#b8ff3c':'#ff3d6e'}" stroke-width="1.6" points="${pts.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ')}"/></svg>
+      <p>Finished at <b>${deg(n)}</b> (${n>0?'right':'left'} of north) · furthest counter-clockwise ${deg(d.min)} · furthest clockwise ${deg(d.max)}</p>`}
+  if(r.test==='compass')return`<p class="ts">Aimed ${d.dir===1?'clockwise ↻':'counter-clockwise ↺'}. Where the needle ended on each spin:</p><div class="chips">${d.a.map((x,i)=>`<span class="${Math.sign(x)===d.dir?'h':'m'}" title="Spin ${i+1}">${x>0?'+':'−'}${Math.abs(x)*4}°</span>`).join('')}</div>`;
+  if(r.test==='ball'){const credits=100+10*(2*r.hits-20);return`<p class="ts">Bet → landing bin (0–4 left, 5–9 right). Final credits: ${credits}.</p><div class="chips">${d.s.map((x,i)=>`<span class="${(d.b[i]>=5?1:-1)===x?'h':'m'}" title="Ball ${i+1}">${x===1?'R':'L'} → ${d.b[i]}</span>`).join('')}</div>`}
+  if(r.test==='pkline')return`<p>${r.hits} ones and ${r.n-r.hits} zeros. The line finished at <b>${d.dev>0?'+':''}${d.dev}</b>; its lowest point was ${d.min}, its highest +${d.max}.</p>`;
+  if(r.test==='remote')return`<p>Target: <b>${UP.esc(d.target)}</b>. You ranked it <b>#${d.rank}</b> of 4${d.rank===1?' (direct hit)':''}. Session ${UP.esc(d.sid)}.</p>`;
+  return''}
+function renderLog(p){const f=document.getElementById('lf').value,rows=p.log.filter(r=>!f||r.test===f),box=document.getElementById('log');
+  if(!rows.length){box.innerHTML='<p class="muted">No runs recorded yet.</p>';return}
+  box.innerHTML=`<div class="tablewrap"><table class="board log"><thead><tr><th>When</th><th>Test</th><th style="text-align:right">Score</th><th style="text-align:right">Chance</th><th style="text-align:right">Z</th><th style="text-align:right">Probability</th><th></th></tr></thead><tbody>
+    ${rows.slice(0,logShown).map((r,i)=>{const t=Board.TESTS.find(x=>x.id===r.test),s=UP.stats(r.hits,r.n,t.p);
+      return`<tr><td class="ts" style="white-space:nowrap">${new Date(r.at).toLocaleString()}</td><td>${t.name}</td><td class="n">${r.hits} / ${r.n}</td><td class="n">${(r.n*t.p).toFixed(r.n*t.p%1?1:0)}</td>
+        <td class="n" style="color:${s.z>=1.645?'var(--lime)':s.z<=-1.645?'var(--red)':'inherit'}">${s.z.toFixed(2)}</td>
+        <td class="n" title="${s.below?'Chance of scoring this low or lower':'Chance of scoring this high or higher'}">${UP.fmtP(s.tail)} ${s.below?'↓':'↑'}</td>
+        <td><button class="btn ghost sm" type="button" data-x="${i}" aria-expanded="false">Details</button></td></tr>
+        <tr class="xrow" id="x-${i}" hidden><td colspan="7">${breakdown(r)}</td></tr>`}).join('')}</tbody></table></div>
+    <p class="ts">Probability: the chance of a result this far from chance in the direction it went (↑ above, ↓ below).</p>
+    ${rows.length>logShown?`<button class="btn ghost" type="button" id="more">Show ${Math.min(30,rows.length-logShown)} more of ${rows.length-logShown}</button>`:''}`;
+  box.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{const x=document.getElementById('x-'+b.dataset.x);x.hidden=!x.hidden;b.setAttribute('aria-expanded',!x.hidden);b.textContent=x.hidden?'Details':'Hide'});
+  document.getElementById('more')?.addEventListener('click',()=>{logShown+=30;renderLog(p)});
+  document.getElementById('lf').onchange=()=>{logShown=30;renderLog(p)}}
+</script>
+<script>
+const app=document.getElementById('app');
+async function load(){
+  if(!(await UP.connect())){app.innerHTML='<div class="panel"><p class="notice">Profiles need the Darkmoon Hub server, which isn\'t running here.</p></div>';return}
+  const me=UP.user();let uid=location.hash.slice(1)||(me&&me.uid);
+  if(!uid){await UP.gate(app,'Your profile');return}
+  let p;try{p=await UP.api('GET','users/'+encodeURIComponent(uid))}catch(x){app.innerHTML=`<div class="panel"><p class="err">${UP.esc(x.message)}</p></div>`;return}
+  const u=p.user,own=me&&me.uid===u.uid,admin=me&&me.role==='admin',earned=p.achievements.filter(a=>a.earned).length;
+  const spark=s=>{if(s.length<2)return'';const W=220,H=46,mx=Math.max(3,...s.map(Math.abs)),x=i=>i/(s.length-1)*W,y=v=>H/2-v/mx*(H/2-4);
+    return`<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="z-score of each run"><line x1="0" x2="${W}" y1="${H/2}" y2="${H/2}" stroke="#3a3a66" stroke-dasharray="3 4"/><polyline fill="none" stroke="#00f0ff" stroke-width="1.6" points="${s.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ')}"/></svg>`};
+  app.innerHTML=`<div style="display:grid;gap:22px">
+    <section class="panel"><div class="row" style="justify-content:space-between;align-items:start"><div style="display:grid;gap:6px;min-width:0">
+      <h1 class="neon-c" style="font-size:clamp(1.8rem,5vw,2.6rem);text-transform:none;overflow-wrap:anywhere">${UP.esc(u.name)}</h1>
+      <div class="meta-row">${u.role==='admin'?'<span class="pill c">Admin</span>':''}${u.banned?'<span class="pill miss">Banned</span>':''}<span>Member since ${new Date(u.created).toLocaleDateString()}</span><span>· ${p.totalRuns} runs</span><span>· ${earned}/${p.achievements.length} achievements</span></div>
+      ${u.bio?`<p style="max-width:62ch">${UP.rich(u.bio)}</p>`:own?'<p class="muted">Add a short bio so others know who you are.</p>':''}</div>
+      <div class="row">${me&&!own&&!u.banned?`<a class="btn mag" href="dms.html#u-${u.uid}">Message</a>`:''}${own?'<button class="btn ghost" id="edit" type="button">Edit profile</button><button class="btn ghost" id="out" type="button">Sign out</button>':''}${admin&&!own?`<a class="btn ghost" href="admin.html#${u.uid}">Moderate</a>`:''}</div></div>
+      <form id="ef" hidden style="display:grid;gap:12px"><div class="field"><label class="lbl" for="en">Display name</label><input type="text" id="en" maxlength="24" value="${UP.esc(u.name)}"></div>
+        <div class="field"><label class="lbl" for="eb">Bio</label><textarea id="eb" maxlength="500">${UP.esc(u.bio)}</textarea></div><p class="err" id="eerr" hidden></p><div class="row"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" id="ec">Cancel</button></div></form></section>
+    <section class="panel"><h2>Track record</h2><div class="tablewrap"><table class="board"><thead><tr><th>Test</th><th style="text-align:right">Runs</th><th style="text-align:right">Best</th><th style="text-align:right">Total</th><th style="text-align:right">Combined Z</th><th>Run by run</th></tr></thead><tbody>
+      ${Board.TESTS.map(t=>{const s=p.stats[t.id];return s?`<tr><td><a class="who-link" href="${t.file}">${t.name}</a></td><td class="n">${s.runs}</td><td class="n">${t.total?'—':s.best+' / '+s.bestOf}</td><td class="n">${s.hits} / ${s.n}</td>
+        <td class="n" style="color:${s.z>=1.645?'var(--lime)':s.z<=-1.645?'var(--red)':'inherit'}">${s.z.toFixed(2)}</td><td style="min-width:140px">${spark(s.series)}</td></tr>`:`<tr><td class="muted">${t.name}</td><td class="n muted" colspan="5" style="text-align:left">No runs yet</td></tr>`}).join('')}</tbody></table></div>
+      <p class="muted" style="font-size:.9rem">Combined Z pools every run of a test. Above 1.65 or below −1.65 is notable; the further from zero, the less likely by chance.</p></section>
+    <section class="panel" id="logp"><div class="row" style="justify-content:space-between"><h2>Test log</h2>
+      <select id="lf" aria-label="Filter by test" style="width:auto"><option value="">All tests (${p.log.length})</option>${Board.TESTS.filter(t=>p.stats[t.id]).map(t=>`<option value="${t.id}">${t.name} (${p.stats[t.id].runs})</option>`).join('')}</select></div>
+      <div id="log"></div></section>
+    <section class="panel"><h2>Achievements</h2><div class="ach">${p.achievements.map(a=>`<div class="${a.earned?'on':''}"><b>${a.earned?'◆ ':'◇ '}${UP.esc(a.name)}</b><small>${UP.esc(a.desc)}</small></div>`).join('')}</div></section>
+    <div class="grid2"><section class="panel"><h2>Forum threads</h2>${p.threads.length?`<div class="list">${p.threads.map(t=>`<a class="who-link" href="thread.html#${t.id}">${UP.esc(t.title)}</a><span class="ts">${UP.ago(t.at)} · ${t.comments} comments</span>`).join('')}</div>`:'<p class="muted">No threads yet.</p>'}</section>
+      <section class="panel"><h2>Market & map</h2>${p.listings.map(l=>`<div class="meta-row"><a class="who-link" href="market.html#${l.id}">${UP.esc(l.title)}</a><span class="price" style="font-size:.95rem">${UP.esc(l.price)}</span>${l.sold?'<span class="pill">Sold</span>':''}</div>`).join('')||'<p class="muted">No listings.</p>'}
+        ${p.pins.map(x=>`<div><a class="who-link" href="map.html#${x.id}">◉ ${UP.esc(x.title)}</a></div>`).join('')||'<p class="muted">No map pins.</p>'}</section></div></div>`;
+  renderLog(p);
+  if(own){const ef=document.getElementById('ef');document.getElementById('edit').onclick=()=>{ef.hidden=!ef.hidden};document.getElementById('ec').onclick=()=>ef.hidden=true;
+    document.getElementById('out').onclick=UP.guard(async e=>{await UP.signOut();location.href='index.html'});
+    ef.onsubmit=UP.guard(async e=>{e.preventDefault();const er=document.getElementById('eerr');er.hidden=true;try{await UP.api('PATCH','me',{name:document.getElementById('en').value,bio:document.getElementById('eb').value});await UP.refreshMe();location.reload()}catch(x){er.hidden=false;er.textContent=x.message}})}
+}
+window.addEventListener('hashchange',load);load();
+</script>

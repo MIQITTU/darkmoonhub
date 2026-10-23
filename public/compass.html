@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Compass Spin · Darkmoon Hub</title>
+<meta name="description" content="A micro-PK test: one 20-second spin of 2,001 random pushes. Will the needle to travel clockwise or counter-clockwise.">
+<meta name="theme-color" content="#05050b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="compass.html">
+<div id="top"></div>
+<main class="wrap">
+<a class="back" href="tests.html">← All tests</a>
+<div style="display:grid;gap:10px"><h1 class="neon-m">Compass Spin</h1>
+<p class="sub">One spin, 20 seconds long. The needle starts at north and receives 2,001 random pushes, about 100 a second, each nudging it 1.5° clockwise or counter-clockwise. Choose your direction, then hold the intention for the whole spin.</p></div>
+<section class="panel" style="justify-items:center;text-align:center">
+  <div class="row center"><button class="btn" id="cw" type="button">↻ Clockwise</button><button class="btn mag" id="ccw" type="button">↺ Counter-clockwise</button></div>
+  <svg id="dial" viewBox="0 0 300 300" style="width:min(100%,360px)" role="img" aria-label="Compass needle">
+    <defs><filter id="gl"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <circle cx="150" cy="150" r="138" fill="#0a0a16" stroke="#00f0ff" stroke-width="2" filter="url(#gl)"/>
+    <circle cx="150" cy="150" r="118" fill="none" stroke="#22223f"/>
+    <g id="ticks"></g>
+    <path id="sweep" d="" fill="none" stroke-width="7" stroke-linecap="round" opacity=".85"/>
+    <line x1="150" y1="20" x2="150" y2="44" stroke="#ffd23b" stroke-width="3"/>
+    <g id="needle"><path d="M150 40 L160 150 L150 160 L140 150Z" fill="#ff2bd6"/><path d="M150 260 L160 150 L150 140 L140 150Z" fill="#00f0ff" opacity=".6"/></g>
+    <circle cx="150" cy="150" r="9" fill="#05050b" stroke="#00f0ff" stroke-width="2"/>
+    <text id="deg" x="150" y="214" text-anchor="middle" font-size="17" fill="#eaf0ff" font-family="JetBrains Mono,monospace"></text>
+    <text id="turns" x="150" y="236" text-anchor="middle" font-size="12" fill="#8b90b8" font-family="JetBrains Mono,monospace"></text>
+  </svg>
+  <div class="stats" id="live" style="width:100%"></div>
+  <div style="width:100%;height:6px;background:var(--line);border-radius:3px;overflow:hidden"><div id="bar" style="height:100%;width:0;background:var(--cyan);box-shadow:var(--glow-c)"></div></div>
+  <div class="row center"><button class="btn big" id="go" type="button">Start the spin · 20 s</button><button class="btn ghost" id="stop" type="button" hidden>Cancel</button></div>
+  <p class="muted" id="msg">Pick a direction to begin.</p>
+</section>
+<section class="panel" id="result" hidden></section>
+<details class="panel"><summary class="lbl" style="cursor:pointer">How it works</summary>
+  <p class="muted">The needle starts at north (the gold mark). Over 20 seconds your browser's cryptographic generator draws 2,001 random bits, about 100 a second. Each bit pushes the needle 1.5° one way or the other, so you watch it wander. The arc shows its net travel from north. Your score is the number of pushes that went your way out of 2,001. Chance expects 1,000.5, and the needle's final position is exactly your score drawn as an angle: every push your way above 1,000.5 moves it 3° further onto your side. Pushes cancel out, so 6 one way and 5 back is a net of 1. With an odd number of pushes it can never end exactly on north. A z-score of 1.65 or more (about 37 pushes above chance, the needle 110° onto your side) happens by chance only 5% of the time.</p></details>
+</main>
+<div id="foot"></div>
+<script src="assets/board.js"></script>
+<script src="assets/app.js"></script>
+<script>
+const N=2001,STEP=1.5,$=id=>document.getElementById(id);
+let dir=null,timer=null,bits=[],net=0,lo=0,hi=0,shown=0,anim=null,t0=0;
+let tk='';for(let a=0;a<360;a+=10){const r=a*Math.PI/180,L=a%90?6:14;tk+=`<line x1="${150+128*Math.sin(r)}" y1="${150-128*Math.cos(r)}" x2="${150+(128-L)*Math.sin(r)}" y2="${150-(128-L)*Math.cos(r)}" stroke="${a%90?'#3a3a66':'#00f0ff'}" stroke-width="${a%90?1:2}"/>`}$('ticks').innerHTML=tk;
+const needle=$('needle'),sweep=$('sweep');
+const liveEl=$('live');liveEl.innerHTML=['Time left','Pushes','Your way','Z'].map(l=>`<div class="stat"><span>${l}</span><b>—</b></div>`).join('');const lv=[...liveEl.querySelectorAll('b')];
+function draw(a){needle.setAttribute('transform',`rotate(${a.toFixed(2)} 150 150)`);
+  const c=Math.max(-359.9,Math.min(359.9,a)),r=118,rad=c*Math.PI/180,x=150+r*Math.sin(rad),y=150-r*Math.cos(rad);
+  sweep.setAttribute('d',Math.abs(c)<0.5?'':`M150 ${150-r} A${r} ${r} 0 ${Math.abs(c)>180?1:0} ${c>0?1:0} ${x.toFixed(2)} ${y.toFixed(2)}`);
+  sweep.setAttribute('stroke',c>=0?'#00f0ff':'#ff2bd6');
+  $('deg').textContent=Math.abs(a)<0.01?'0°':`${a>0?'+':'−'}${Math.abs(a).toFixed(1)}° · ${a>0?'right':'left'} of north`;
+  const turns=Math.floor(Math.abs(a)/360);$('turns').textContent=turns?`${turns} full turn${turns>1?'s':''} ${a>0?'clockwise':'counter-clockwise'}`:''}
+/* smooth display: the needle eases toward the true position; the loop stops itself once it has caught up after the run */
+function animate(){const target=net*STEP;shown+=(target-shown)*0.25;if(Math.abs(target-shown)<0.05)shown=target;draw(shown);
+  anim=(timer||shown!==target)?requestAnimationFrame(animate):null}
+const yourWay=()=>{const cw=bits.reduce((a,b)=>a+b,0);return dir===1?cw:bits.length-cw};
+function stats(){const n=bits.length,y=yourWay(),z=n?(y-n/2)/Math.sqrt(n/4):0,left=Math.max(0,20-(performance.now()-t0)/1000);
+  lv[0].textContent=timer?left.toFixed(1)+' s':'—';lv[1].textContent=n;lv[2].textContent=y;lv[3].textContent=z.toFixed(2);$('bar').style.width=(n/N*100)+'%'}
+function ui(){const running=!!timer;$('cw').disabled=$('ccw').disabled=running;$('go').disabled=running||!dir;$('stop').hidden=!running}
+function pick(d){if(timer)return;dir=d;$('cw').classList.toggle('on',d===1);$('ccw').classList.toggle('on',d===-1);
+  $('msg').textContent=`Target: ${d===1?'clockwise ↻':'counter-clockwise ↺'}. Press Start when you are ready.`;stats();ui()}
+function reset(){bits=[];net=0;lo=0;hi=0;shown=0;draw(0);$('bar').style.width='0';$('result').hidden=true}
+function start(){if(timer||!dir)return;reset();t0=performance.now();$('msg').textContent=`Hold the intention: ${dir===1?'clockwise ↻':'counter-clockwise ↺'}.`;
+  // ~100 pushes a second, paced by the clock so a slow phone still delivers all 2,001 in 20 s
+  timer=setInterval(()=>{const want=Math.min(N,Math.round((performance.now()-t0)/1000*100)+1);
+    while(bits.length<want){const b=UP.bit();bits.push(b);net+=b?1:-1;if(net<lo)lo=net;if(net>hi)hi=net}
+    stats();if(bits.length>=N)finish()},100);
+  ui();if(!anim)anim=requestAnimationFrame(animate)}
+function hex(){let h='';for(let k=0;k<2004;k+=4){let v=0;for(let j=0;j<4;j++)v=v*2+(bits[k+j]||0);h+=v.toString(16)}return h}
+function finish(){clearInterval(timer);timer=null;ui();stats();if(!anim)anim=requestAnimationFrame(animate);
+  const y=yourWay(),side=net>0?1:-1;
+  $('msg').textContent=`Finished ${side===dir?'on your side':'on the other side'}: ${y} of ${N} pushes went your way.`;
+  UP.result($('result'),'compass',y,`<div class="stat"><span>Final angle</span><b>${net>0?'+':'−'}${Math.abs(net*STEP).toFixed(1)}°</b></div>`,{dir,bits:hex(),min:lo,max:hi});
+  $('result').scrollIntoView({behavior:'smooth',block:'nearest'})}
+function cancel(){if(!timer)return;clearInterval(timer);timer=null;reset();stats();ui();$('msg').textContent='Spin cancelled. Nothing was recorded.'}
+$('cw').onclick=()=>pick(1);$('ccw').onclick=()=>pick(-1);$('go').onclick=start;$('stop').onclick=cancel;
+draw(0);stats();ui();
+</script>
+</body>
+</html>

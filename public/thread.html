@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thread · Darkmoon Hub</title>
+<meta name="description" content="A forum thread on Darkmoon Hub.">
+<meta name="theme-color" content="#05050b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="thread.html">
+<div id="top"></div>
+<main class="wrap">
+<a class="back" href="forum.html">← Forum</a>
+<div id="app"><p class="empty">Loading…</p></div>
+</main>
+<div id="foot"></div>
+<script src="assets/board.js"></script>
+<script src="assets/app.js"></script>
+<script>
+const app=document.getElementById('app');
+async function load(){const id=location.hash.slice(1);
+  if(!(await UP.connect())){app.innerHTML='<div class="panel"><p class="notice">The forum needs the Darkmoon Hub server, which isn\'t running here.</p></div>';return}
+  let t;try{t=(await UP.api('GET','threads/'+encodeURIComponent(id))).thread}catch(x){app.innerHTML=`<div class="panel"><p class="err">${UP.esc(x.message)}</p><a class="btn" href="forum.html">Back to the forum</a></div>`;return}
+  const me=UP.user(),mod=uid=>me&&(me.uid===uid||me.role==='admin');document.title=t.title+' · Darkmoon Hub';
+  app.innerHTML=`<article class="panel"><h1 class="neon-c" style="font-size:clamp(1.5rem,4vw,2.2rem);text-transform:none">${UP.esc(t.title)}</h1>
+      <div class="meta-row">${UP.who(t.author)}<span>· ${new Date(t.at).toLocaleString()}</span>${mod(t.author.uid)?'<button class="btn ghost sm" id="delt" type="button">Delete thread</button>':''}</div>
+      <div class="post-body">${UP.rich(t.body)}</div></article>
+    <section class="panel"><h2>${t.comments.length} comment${t.comments.length===1?'':'s'}</h2><div id="cs">${t.comments.map(c=>`<div class="comment" id="c-${c.id}"><div class="meta-row">${UP.who(c.author)}<span class="ts">${UP.ago(c.at)}</span>${mod(c.uid)?`<button class="btn ghost sm" data-del="${c.id}" type="button">Delete</button>`:''}</div><div class="body">${UP.rich(c.text)}</div></div>`).join('')||'<p class="muted">No comments yet.</p>'}</div>
+      ${me?`<form id="cf" style="display:grid;gap:10px"><label class="lbl" for="ct">Add a comment</label><textarea id="ct" maxlength="3000"></textarea><p class="err" id="cerr" hidden></p><button class="btn" type="submit" style="justify-self:start">Comment</button></form>`:'<button class="btn mag" type="button" id="si" style="justify-self:start">Sign in to comment</button>'}</section>`;
+  if(document.getElementById('delt'))UP.confirmBtn(document.getElementById('delt'),'Confirm delete',async()=>{await UP.api('DELETE','threads/'+t.id);location.href='forum.html'});
+  app.querySelectorAll('[data-del]').forEach(b=>UP.confirmBtn(b,'Confirm',async()=>{await UP.api('DELETE',`threads/${t.id}/comments/${b.dataset.del}`);load()}));
+  document.getElementById('si')?.addEventListener('click',UP.goSignIn);
+  const cf=document.getElementById('cf');if(cf)cf.onsubmit=UP.guard(async e=>{e.preventDefault();const er=document.getElementById('cerr');er.hidden=true;try{await UP.api('POST',`threads/${t.id}/comments`,{text:document.getElementById('ct').value});load()}catch(x){er.hidden=false;er.textContent=x.message}});
+}
+window.addEventListener('hashchange',load);load();
+</script>
+</body>
+</html>

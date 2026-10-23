@@ -1,0 +1,64 @@
+{"title":"Map","desc":"A shared map where Darkmoon Hub members pin places and experiences.","scripts":["vendor/leaflet/leaflet.js"],"css":["vendor/leaflet/leaflet.css"]}
+<div class="row" style="justify-content:space-between"><h1 class="neon-c" style="font-size:1.6rem">Map</h1>
+  <div class="row"><button class="btn" id="here" type="button">Pin my location</button><button class="btn mag" id="add" type="button">Pin a spot</button></div></div>
+<form class="searchbar" id="sf" role="search"><input type="search" id="q" placeholder="Search for a place, address or city" aria-label="Search places"><button class="btn" type="submit">Search</button></form>
+<div class="geo-results" id="geo"></div>
+<p class="notice" id="hint" hidden></p>
+<form class="panel" id="pf" hidden novalidate>
+  <h2>New pin</h2><p class="mono muted" id="pc" style="font-size:.85rem"></p>
+  <div class="field"><label class="lbl" for="pt">Title</label><input type="text" id="pt" maxlength="80" placeholder="e.g. Lights over the ridge"></div>
+  <div class="field"><label class="lbl" for="pd">Description</label><textarea id="pd" maxlength="1000" placeholder="What happened here, when, and what you noticed."></textarea></div>
+  <p class="err" id="perr" hidden></p><div class="row"><button class="btn" type="submit">Save pin</button><button class="btn ghost" type="button" id="pcn">Cancel</button></div>
+  <p class="muted" style="font-size:.88rem">New pins are locked so they can't be dragged by accident. Unlock a pin from its popup to move it.</p>
+</form>
+<div id="map" role="application" aria-label="Community map"></div>
+<p class="muted" style="font-size:.88rem">Pins in <span style="color:var(--cyan)">cyan</span> are yours, <span style="color:var(--mag)">magenta</span> are other members', and <span style="color:var(--gold)">gold</span> are unlocked and can be dragged.</p>
+<style>.leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.82) contrast(.92) saturate(.6)}</style>
+<script>
+const $=id=>document.getElementById(id);let me=UP.user(),pins={},markers={},draft=null,picking=false;
+const map=L.map('map',{worldCopyJump:true}).setView([25,10],2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,subdomains:'abc',attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'}).addTo(map);
+const canEdit=p=>me&&(me.uid===p.uid||me.role==='admin');
+const icon=p=>L.divIcon({className:'',html:`<div class="pin-ico ${!p.locked?'open':me&&me.uid===p.uid?'mine':''}"></div>`,iconSize:[22,22],iconAnchor:[11,22],popupAnchor:[0,-22]});
+function popup(p){const d=document.createElement('div');
+  d.innerHTML=`<h3>${UP.esc(p.title)}</h3>${p.desc?`<div style="overflow-wrap:anywhere;margin-bottom:8px">${UP.rich(p.desc)}</div>`:''}<div class="meta-row" style="font-size:.85rem">${UP.who(p.author)}<span>· ${UP.ago(p.at)}</span></div>
+   ${canEdit(p)?`<div class="row" style="margin-top:10px;gap:6px"><button class="btn sm" data-a="lock" type="button">${p.locked?'Unlock to move':'Lock in place'}</button><button class="btn ghost sm" data-a="edit" type="button">Edit</button><button class="btn ghost sm" data-a="del" type="button">Delete</button></div>${p.locked?'':'<p class="muted" style="font-size:.82rem;margin-top:6px">Drag the pin to its new position, then lock it.</p>'}`:''}
+   <p class="mono muted" style="font-size:.75rem;margin-top:8px">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</p>`;
+  const q=a=>d.querySelector(`[data-a="${a}"]`);
+  if(q('lock'))q('lock').onclick=UP.guard(async e=>{try{await UP.api('PATCH','pins/'+p.id,{locked:!p.locked})}catch(x){UP.toast(x.message)}});
+  if(q('edit'))q('edit').onclick=()=>{d.innerHTML=`<form style="display:grid;gap:8px"><input type="text" maxlength="80" value="${UP.esc(p.title)}" aria-label="Title"><textarea maxlength="1000" aria-label="Description">${UP.esc(p.desc)}</textarea><div class="row"><button class="btn sm" type="submit">Save</button></div></form>`;
+    d.querySelector('form').onsubmit=UP.guard(async e=>{e.preventDefault();try{await UP.api('PATCH','pins/'+p.id,{title:d.querySelector('input').value,desc:d.querySelector('textarea').value})}catch(x){UP.toast(x.message)}})};
+  if(q('del'))UP.confirmBtn(q('del'),'Confirm delete',async()=>{await UP.api('DELETE','pins/'+p.id)});
+  return d}
+function place(p){pins[p.id]=p;let m=markers[p.id];const open=m&&m.isPopupOpen();
+  if(!m){m=markers[p.id]=L.marker([p.lat,p.lng],{icon:icon(p),title:p.title,keyboard:true}).addTo(map);
+    m.on('dragend',async()=>{const ll=m.getLatLng(),cur=pins[p.id];try{await UP.api('PATCH','pins/'+p.id,{lat:ll.lat,lng:((ll.lng+540)%360)-180})}catch(x){UP.toast(x.message);m.setLatLng([cur.lat,cur.lng])}})}
+  else{m.setLatLng([p.lat,p.lng]);m.setIcon(icon(p))}
+  m.bindPopup(()=>popup(pins[p.id]),{maxWidth:300});
+  if(!m._pickHook){m._pickHook=1;m.on('click',e=>{if(picking){m.closePopup();const ll=m.getLatLng();startDraft(ll.lat,((ll.lng+540)%360)-180)}})}  // placing a pin on top of an existing one
+  if(canEdit(p)&&!p.locked)m.dragging.enable();else m.dragging.disable();
+  if(open){m.closePopup();m.openPopup()}}
+function remove(id){if(markers[id]){map.removeLayer(markers[id]);delete markers[id];delete pins[id]}}
+(async()=>{if(!(await UP.connect())){$('hint').hidden=false;$('hint').textContent='Pins need the Darkmoon Hub server, which isn\'t running here. You can still search and browse the map.';return}
+  try{(await UP.api('GET','pins')).pins.forEach(place)}catch(x){UP.toast(x.message)}
+  const h=location.hash.slice(1);if(pins[h]){map.setView([pins[h].lat,pins[h].lng],13);markers[h].openPopup()}
+  UP.on('pin',d=>{if(d.action==='delete')remove(d.id);else place(d.pin)})})();
+function startDraft(lat,lng){if(!me){UP.goSignIn();return}draft={lat,lng};$('pc').textContent=`${lat.toFixed(5)}, ${lng.toFixed(5)}`;$('pf').hidden=false;$('hint').hidden=true;picking=false;$('pt').focus();
+  if(draft.m)map.removeLayer(draft.m);draft.m=L.circleMarker([lat,lng],{radius:10,color:'#ffd23b',weight:2}).addTo(map)}
+function cancelDraft(){if(draft&&draft.m)map.removeLayer(draft.m);draft=null;$('pf').hidden=true}
+$('add').onclick=()=>{if(!me){UP.goSignIn();return}picking=true;$('hint').hidden=false;$('hint').textContent='Click or tap the map where you want the pin.';$('map').scrollIntoView({behavior:'smooth',block:'center'})};
+map.on('click',e=>{if(picking)startDraft(e.latlng.lat,((e.latlng.lng+540)%360)-180)});
+$('here').onclick=()=>{if(!me){UP.goSignIn();return}if(!navigator.geolocation){UP.toast('Your browser cannot share its location.');return}
+  $('hint').hidden=false;$('hint').textContent='Finding your location…';
+  navigator.geolocation.getCurrentPosition(p=>{map.setView([p.coords.latitude,p.coords.longitude],14);startDraft(p.coords.latitude,p.coords.longitude)},
+    ()=>{$('hint').textContent='Location unavailable. Allow location access in your browser, or use "Pin a spot" and tap the map instead.'},{enableHighAccuracy:true,timeout:12000})};
+$('pcn').onclick=cancelDraft;
+$('pf').onsubmit=UP.guard(async e=>{e.preventDefault();const er=$('perr');er.hidden=true;try{const j=await UP.api('POST','pins',{title:$('pt').value,desc:$('pd').value,lat:draft.lat,lng:draft.lng});place(j.pin);cancelDraft();$('pt').value='';$('pd').value='';markers[j.pin.id].openPopup();UP.toast('Pin saved and locked')}catch(x){er.hidden=false;er.textContent=x.message}});
+$('sf').onsubmit=UP.guard(async e=>{e.preventDefault();const q=$('q').value.trim();if(q.length<2)return;const g=$('geo');g.innerHTML='<span class="muted">Searching…</span>';
+  if(!(await UP.connect())){g.innerHTML='<span class="muted">Place search needs the server.</span>';return}
+  try{const r=(await UP.api('GET','geocode?q='+encodeURIComponent(q))).results;
+    g.innerHTML=r.length?r.map((x,i)=>`<button type="button" data-i="${i}">${UP.esc(x.name)}</button>`).join(''):'<span class="muted">No places found.</span>';
+    g.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const x=r[+b.dataset.i];map.setView([x.lat,x.lng],13);g.innerHTML='';
+      if(me){$('hint').hidden=false;$('hint').innerHTML='Showing that place. <button class="btn sm" type="button" id="pinit">Pin this spot</button>';$('pinit').onclick=()=>startDraft(x.lat,x.lng)}})}
+  catch(x){g.innerHTML=`<span class="err">${UP.esc(x.message)}</span>`}});
+</script>

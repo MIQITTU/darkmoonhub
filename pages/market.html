@@ -1,0 +1,34 @@
+{"title":"Market","desc":"Buy, sell and trade with Darkmoon Hub members."}
+<div class="row" style="justify-content:space-between"><h1 class="neon-c" style="font-size:1.6rem">Market</h1><button class="btn mag" id="newb" type="button">Post a listing</button></div>
+<p class="notice">Sellers put their payment details in each listing. Trades happen directly between members; the site doesn't handle payments. Check a seller's profile and history before you pay.</p>
+<form class="panel" id="nf" hidden novalidate>
+  <h2 id="ftitle">New listing</h2>
+  <div class="grid2"><div class="field"><label class="lbl" for="lt">Title</label><input type="text" id="lt" maxlength="100"></div>
+  <div class="field"><label class="lbl" for="lp">Price</label><input type="text" id="lp" maxlength="30" placeholder="e.g. $20, 15 €, or trade"></div></div>
+  <div class="field"><label class="lbl" for="ld">Description and payment details</label><textarea id="ld" maxlength="4000" style="min-height:160px" placeholder="What it is, its condition, shipping, and how to pay (PayPal address, bank details, etc.)."></textarea></div>
+  <p class="err" id="lerr" hidden></p><div class="row"><button class="btn" type="submit">Publish</button><button class="btn ghost" type="button" id="lc">Cancel</button></div>
+</form>
+<form class="searchbar" id="sf" role="search"><input type="search" id="q" placeholder="Search listings, prices and sellers" aria-label="Search the market"><button class="btn" type="submit">Search</button></form>
+<div id="list" class="cards"><p class="empty">Loading…</p></div>
+<script>
+const $=id=>document.getElementById(id);let editing=null,items=[];
+async function load(){const q=$('q').value.trim();
+  if(!(await UP.connect())){$('list').innerHTML='<div class="panel"><p class="notice">The market needs the Darkmoon Hub server, which isn\'t running here.</p></div>';return}
+  try{items=(await UP.api('GET','listings'+(q?'?q='+encodeURIComponent(q):''))).listings}catch(x){$('list').innerHTML=`<p class="err">${UP.esc(x.message)}</p>`;return}
+  const me=UP.user(),mod=uid=>me&&(me.uid===uid||me.role==='admin');
+  $('list').innerHTML=items.length?items.map(l=>`<article class="item-card" id="${l.id}" style="${l.sold?'opacity:.6':''}"><div class="row" style="justify-content:space-between;align-items:start"><h3 style="min-width:0;overflow-wrap:anywhere">${UP.esc(l.title)}</h3><span class="price">${UP.esc(l.price)}</span></div>
+    ${l.sold?'<span class="pill">Sold</span>':''}<div class="ex" style="color:var(--ink)">${UP.rich(l.desc)}</div>
+    <div class="meta-row">${UP.who(l.author)}<span>· ${UP.ago(l.at)}</span></div>
+    <div class="row">${me&&me.uid!==l.uid?`<a class="btn sm" href="dms.html#u-${l.uid}">Message seller</a>`:''}${me&&me.uid===l.uid?`<button class="btn ghost sm" data-edit="${l.id}" type="button">Edit</button><button class="btn ghost sm" data-sold="${l.id}" type="button">${l.sold?'Mark available':'Mark sold'}</button>`:''}${mod(l.uid)?`<button class="btn ghost sm" data-del="${l.id}" type="button">Delete</button>`:''}</div></article>`).join(''):
+    `<div class="panel empty">${q?'No listings match that search.':'No listings yet.'}</div>`;
+  document.querySelectorAll('[data-del]').forEach(b=>UP.confirmBtn(b,'Confirm',async()=>{await UP.api('DELETE','listings/'+b.dataset.del);load()}));
+  document.querySelectorAll('[data-sold]').forEach(b=>b.onclick=UP.guard(async e=>{const l=items.find(x=>x.id===b.dataset.sold);await UP.api('PATCH','listings/'+l.id,{sold:!l.sold});load()}));
+  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const l=items.find(x=>x.id===b.dataset.edit);editing=l.id;$('ftitle').textContent='Edit listing';$('lt').value=l.title;$('lp').value=l.price;$('ld').value=l.desc;$('nf').hidden=false;$('nf').scrollIntoView({behavior:'smooth'})});
+  const h=location.hash.slice(1);if(h&&document.getElementById(h)){const el=document.getElementById(h);el.scrollIntoView({block:'center'});el.style.borderColor='var(--cyan)'}}
+$('sf').onsubmit=e=>{e.preventDefault();load()};let qt;$('q').oninput=()=>{clearTimeout(qt);qt=setTimeout(load,350)};
+$('newb').onclick=()=>{if(!UP.user()){UP.goSignIn();return}editing=null;$('ftitle').textContent='New listing';['lt','lp','ld'].forEach(i=>$(i).value='');$('nf').hidden=false;$('lt').focus()};
+$('lc').onclick=()=>$('nf').hidden=true;
+$('nf').onsubmit=UP.guard(async e=>{e.preventDefault();const er=$('lerr');er.hidden=true;const b={title:$('lt').value,price:$('lp').value,desc:$('ld').value};
+  try{await UP.api(editing?'PATCH':'POST','listings'+(editing?'/'+editing:''),b);$('nf').hidden=true;UP.toast(editing?'Listing updated':'Listing published');load()}catch(x){er.hidden=false;er.textContent=x.message}});
+load();
+</script>

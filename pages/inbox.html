@@ -1,0 +1,14 @@
+{"title":"Inbox","desc":"Your Darkmoon Hub notifications."}
+<div class="row" style="justify-content:space-between"><h1 class="neon-m" style="font-size:1.6rem">Inbox</h1><button class="btn ghost" id="all" type="button" hidden>Mark all as read</button></div>
+<div id="app" class="list"></div>
+<script>
+const app=document.getElementById('app'),ICON={dm:'Message',comment:'Comment',mention:'Mention',achievement:'Achievement',mod:'Moderation'};
+(async()=>{if(!(await UP.gate(app,'Your inbox')))return;await load();UP.on('notif',load)})();
+async function load(){let j;try{j=await UP.api('GET','notifications')}catch(x){app.innerHTML=`<p class="err">${UP.esc(x.message)}</p>`;return}
+  document.getElementById('all').hidden=!j.unread;
+  app.innerHTML=j.notifications.length?j.notifications.map(n=>`<a class="notif ${n.read?'':'unread'}" href="${UP.esc(n.link||'#')}" data-id="${n.id}"><i aria-hidden="true"></i>
+    <div style="display:grid;gap:2px;min-width:0"><span class="lbl">${ICON[n.type]||'Notice'}${n.count>1?` · ${n.count}`:''}</span><span style="overflow-wrap:anywhere">${UP.esc(n.text)}</span></div><span class="ts">${UP.ago(n.at)}</span></a>`).join(''):
+    '<div class="panel empty">Nothing here yet. Messages, comments on your threads, mentions and achievements will show up here.</div>';
+  app.querySelectorAll('[data-id]').forEach(a=>a.addEventListener('click',e=>{if(a.classList.contains('unread')){e.preventDefault();UP.api('POST','notifications/read',{ids:[a.dataset.id]}).finally(()=>location.href=a.getAttribute('href'))}}))}
+document.getElementById('all').onclick=UP.guard(async e=>{await UP.api('POST','notifications/read',{});load()});
+</script>
