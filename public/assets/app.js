@@ -9,7 +9,14 @@ const CONFIG={
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* Escape, then turn http(s) links into anchors and keep line breaks */
-const rich=s=>esc(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g,u=>`<a href="${u}" target="_blank" rel="noopener nofollow ugc">${u}</a>`).replace(/\n/g,'<br>');
+/* Escape, link tagged members (@Name → their profile), turn http(s) links into anchors, and keep line breaks.
+   `tags` is the list of members the server found tagged in this post: [{uid,name}]. */
+const reEsc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function rich(s,tags){let h=esc(s);
+  const ts=(tags||[]).filter(t=>t&&t.uid&&t.name&&t.name!=='deleted').sort((a,b)=>b.name.length-a.name.length);
+  if(ts.length){const by={};ts.forEach(t=>by[esc(t.name).toLowerCase()]=t);
+    h=h.replace(new RegExp(`(^|[^\\p{L}\\p{N}_/])@(${ts.map(t=>reEsc(esc(t.name))).join('|')})(?![\\p{L}\\p{N}_])`,'giu'),(m,pre,n)=>{const t=by[n.toLowerCase()];return t?`${pre}<a class="tag" href="profile.html#${esc(t.uid)}">@${n}</a>`:m})}
+  return h.replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g,u=>`<a href="${u}" target="_blank" rel="noopener nofollow ugc">${u}</a>`).replace(/\n/g,'<br>')}
 function ago(t){const s=(Date.now()-t)/1000;if(s<45)return'just now';if(s<3600)return Math.round(s/60)+' min ago';if(s<86400)return Math.round(s/3600)+' h ago';if(s<604800)return Math.round(s/86400)+' d ago';return new Date(t).toLocaleDateString()}
 const who=a=>a?`<a class="who-link" href="profile.html#${esc(a.uid)}">${esc(a.name)}</a>${a.role==='admin'?' <span class="pill c" title="Administrator">admin</span>':''}`:'';
 
@@ -44,7 +51,7 @@ const handlers={};let es=null;
 function on(ev,fn){(handlers[ev]||(handlers[ev]=[])).push(fn)}
 function startStream(){const u=user();if(!u||!u.token||es||!window.EventSource)return;
   es=new EventSource('api/stream?token='+encodeURIComponent(u.token));
-  ['hello','notif','msg','msg-del','rooms','dm','pin'].forEach(ev=>es.addEventListener(ev,e=>{let d={};try{d=JSON.parse(e.data)}catch(x){}
+  ['hello','notif','msg','msg-del','rooms','dm','dm-del','pin'].forEach(ev=>es.addEventListener(ev,e=>{let d={};try{d=JSON.parse(e.data)}catch(x){}
     if(ev==='hello'||ev==='notif')badge(d.unread);(handlers[ev]||[]).forEach(f=>f(d))}));
 }
 
@@ -82,6 +89,28 @@ function guard(fn){let running=false;return function(e){if(e&&e.type==='submit'&
 function confirmBtn(btn,label,fn){btn.addEventListener('click',async()=>{if(!btn.dataset.armed){btn.dataset.armed='1';const old=btn.textContent;btn.textContent=label;btn.classList.add('danger');
   setTimeout(()=>{delete btn.dataset.armed;btn.textContent=old;btn.classList.remove('danger')},3500);return}delete btn.dataset.armed;btn.disabled=true;try{await fn()}catch(e){toast(e.message);btn.disabled=false}})}
 
-window.UP={CONFIG,$,esc,rich,ago,who,ls,ss,connect,info,user,api,setSession,refreshMe,signOut,afterSignIn,goSignIn,on,startStream,toast,gate,confirmBtn,badge,guard};
+/* Tag picker: typing "@" in a text box offers matching member names; Enter/Tab or a tap inserts "@Name ". */
+function tagger(ta){if(!ta||ta._tagger)return;ta._tagger=1;
+  const box=document.createElement('div');box.className='tagbox';box.hidden=true;box.setAttribute('role','listbox');box.setAttribute('aria-label','Tag a member');document.body.appendChild(box);
+  let items=[],idx=0,start=-1,seq=0,timer=null;const me=()=>user();
+  const hide=()=>{box.hidden=true;items=[];start=-1};
+  function place(){const r=ta.getBoundingClientRect(),w=Math.min(Math.max(r.width,220),340);box.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+'px';box.style.width=w+'px';
+    if(r.top>220){box.style.top='';box.style.bottom=(innerHeight-r.top+6)+'px'}else{box.style.bottom='';box.style.top=(r.bottom+6)+'px'}}
+  function draw(){if(!items.length){hide();return}
+    box.innerHTML=items.map((u,i)=>`<button type="button" role="option" aria-selected="${i===idx}" class="${i===idx?'on':''}" data-i="${i}">@${esc(u.name)}${u.role==='admin'?' <small>admin</small>':''}</button>`).join('');
+    box.querySelectorAll('[data-i]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>pick(items[+b.dataset.i])});place();box.hidden=false}
+  function pick(u){if(!u||start<0)return;const pos=ta.selectionStart,v=ta.value,ins='@'+u.name+' ';
+    ta.value=v.slice(0,start)+ins+v.slice(pos).replace(/^\s+/,'');const c=start+ins.length;ta.setSelectionRange(c,c);hide();ta.focus();ta.dispatchEvent(new Event('input',{bubbles:true}))}
+  ta.addEventListener('input',()=>{const pos=ta.selectionStart,m=/(^|[^\p{L}\p{N}_])@([\p{L}\p{N}._\- ]{0,24})$/u.exec(ta.value.slice(0,pos));
+    if(!m||/^\s|\s\s/.test(m[2])){hide();return}const q=m[2];start=pos-q.length-1;clearTimeout(timer);
+    timer=setTimeout(async()=>{const my=++seq;let r=[];try{r=(await api('GET','users?q='+encodeURIComponent(q))).users}catch(e){}
+      if(my!==seq||start<0)return;const lq=q.toLowerCase();items=r.filter(u=>u.uid!==(me()||{}).uid&&u.name.toLowerCase().includes(lq)).slice(0,6);idx=0;draw()},120)});
+  (ta.form||ta.parentNode).addEventListener('keydown',e=>{if(e.target!==ta||box.hidden||!items.length)return;
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){idx=(idx+(e.key==='ArrowDown'?1:items.length-1))%items.length;draw()}
+    else if(e.key==='Enter'||e.key==='Tab')pick(items[idx]);else if(e.key==='Escape')hide();else return;
+    e.preventDefault();e.stopPropagation()},true);
+  ta.addEventListener('blur',()=>setTimeout(hide,150));addEventListener('resize',hide);addEventListener('scroll',()=>{if(!box.hidden)place()},true)}
+
+window.UP={CONFIG,$,esc,rich,tagger,ago,who,ls,ss,connect,info,user,api,setSession,refreshMe,signOut,afterSignIn,goSignIn,on,startStream,toast,gate,confirmBtn,badge,guard};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',chrome);else chrome();
 })();

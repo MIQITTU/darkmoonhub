@@ -3,7 +3,7 @@
 <form class="panel" id="nf" hidden novalidate>
   <h2>New thread</h2>
   <div class="field"><label class="lbl" for="nt">Title</label><input type="text" id="nt" maxlength="120" placeholder="What happened?"></div>
-  <div class="field"><label class="lbl" for="nb">Your experience</label><textarea id="nb" maxlength="10000" style="min-height:180px" placeholder="Describe it in as much detail as you can: when, where, what you noticed, and any results."></textarea></div>
+  <div class="field"><label class="lbl" for="nb">Your experience</label><textarea id="nb" maxlength="10000" style="min-height:180px" placeholder="Describe it in as much detail as you can (type @ to tag someone): when, where, what you noticed, and any results."></textarea></div>
   <p class="err" id="nerr" hidden></p><div class="row"><button class="btn" type="submit">Post thread</button><button class="btn ghost" type="button" id="nc">Cancel</button></div>
 </form>
 <form class="searchbar" id="sf" role="search"><input type="search" id="q" placeholder="Search threads, posts and authors" aria-label="Search the forum"><button class="btn" type="submit">Search</button></form>
@@ -19,6 +19,7 @@ async function load(){const q=$('q').value.trim();
   catch(x){$('list').innerHTML=`<p class="err">${UP.esc(x.message)}</p>`}}
 $('sf').onsubmit=e=>{e.preventDefault();load()};let qt;$('q').oninput=()=>{clearTimeout(qt);qt=setTimeout(load,350)};
 $('newb').onclick=UP.guard(async e=>{if(!UP.user()){UP.goSignIn();return}$('nf').hidden=false;$('nt').focus()});$('nc').onclick=()=>$('nf').hidden=true;
+UP.tagger($('nb'));
 $('nf').onsubmit=UP.guard(async e=>{e.preventDefault();const er=$('nerr');er.hidden=true;try{const j=await UP.api('POST','threads',{title:$('nt').value,body:$('nb').value});location.href='thread.html#'+j.thread.id}catch(x){er.hidden=false;er.textContent=x.message}});
 load();
 </script>

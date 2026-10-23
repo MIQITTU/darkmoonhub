@@ -33,6 +33,7 @@ const app=document.getElementById('app');let me,list=[],cur=null,other=null;
   let qt;document.getElementById('q').oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>find(e.target.value),250)};document.getElementById('find').onsubmit=e=>e.preventDefault();
   const txt=document.getElementById('txt');txt.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('send').requestSubmit()}});
   document.getElementById('send').onsubmit=UP.guard(async e=>{e.preventDefault();const t=txt.value.trim();if(!t||!cur)return;txt.disabled=true;try{await UP.api('POST',`dms/${cur}/messages`,{text:t});txt.value=''}catch(x){UP.toast(x.message)}txt.disabled=false;txt.focus()});
+  UP.on('dm-del',d=>{if(d.id===cur)document.getElementById('m-'+d.mid)?.remove();loadList()});
   UP.on('dm',d=>{if(d.id===cur){add(d.m);UP.api('POST',`dms/${cur}/read`).catch(()=>{})}loadList()});
   await loadList();
   const h=location.hash.slice(1);if(h.startsWith('u-'))startWith(h.slice(2));else if(h)openDm(h);else if(innerWidth>820&&list[0])openDm(list[0].id);
@@ -51,7 +52,8 @@ async function openDm(id){try{const j=await UP.api('GET','dms/'+id);cur=id;other
   const t=document.getElementById('txt');t.disabled=me.mutedUntil>Date.now();document.getElementById('sb').disabled=t.disabled;if(!t.disabled&&innerWidth>820)t.focus();
   await UP.api('POST',`dms/${id}/read`);loadList();if(innerWidth<=820)document.getElementById('thread').scrollIntoView({behavior:'smooth'})}catch(x){UP.toast(x.message)}}
 function add(m){const box=document.getElementById('msgs');document.getElementById('none')?.remove();if(document.getElementById('m-'+m.id))return;const el=document.createElement('div');el.id='m-'+m.id;el.className='msg'+(m.uid===me.uid?' mine':'');
-  el.innerHTML=`<div class="meta"><b>${m.uid===me.uid?'You':UP.esc(m.author.name)}</b><span class="ts" title="${new Date(m.at).toLocaleString()}">${UP.ago(m.at)}</span></div><div class="body">${UP.rich(m.text)}</div>`;box.appendChild(el);trimMsgs(box);box.scrollTop=box.scrollHeight}
+  el.innerHTML=`<div class="meta"><b>${m.uid===me.uid?'You':UP.esc(m.author.name)}</b><span class="ts" title="${new Date(m.at).toLocaleString()}">${UP.ago(m.at)}</span></div><div class="body">${UP.rich(m.text)}</div>${m.uid===me.uid?'<div class="tools"><button class="btn ghost sm" data-a="del" type="button" aria-label="Delete message">Delete</button></div>':''}`;
+  const del=el.querySelector('[data-a="del"]'),dmId=cur;if(del)UP.confirmBtn(del,'Confirm',async()=>{await UP.api('DELETE',`dms/${dmId}/messages/${m.id}`);el.remove();loadList()});box.appendChild(el);trimMsgs(box);box.scrollTop=box.scrollHeight}
 </script>
 </body>
 </html>

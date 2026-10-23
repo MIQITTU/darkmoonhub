@@ -196,3 +196,11 @@ body{overflow-wrap:anywhere}
 table.board td.n,table.board th,.ts,.btn,.pill,.stat b,.lbl{overflow-wrap:normal}
 table.board td.n{white-space:nowrap}
 .price{flex-shrink:1;min-width:0;overflow-wrap:anywhere}
+
+/* Tags (@Name) and the tag picker */
+a.tag{color:var(--mag);font-weight:600;text-decoration:none;background:rgba(255,43,214,.1);border-radius:3px;padding:0 3px}
+a.tag:hover{text-decoration:underline}
+.tagbox{position:fixed;z-index:60;display:grid;gap:2px;padding:4px;background:var(--panel);border:1px solid var(--mag);border-radius:8px;box-shadow:var(--glow-m);max-height:240px;overflow:auto}
+.tagbox button{all:unset;cursor:pointer;padding:9px 10px;border-radius:5px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tagbox button small{color:var(--cyan);font:600 .7rem var(--f-m);text-transform:uppercase;margin-left:6px}
+.tagbox button.on,.tagbox button:hover{background:rgba(255,43,214,.14)}

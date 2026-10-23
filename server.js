@@ -107,11 +107,28 @@ function text(v, max, { min = 0, field = 'Text', multiline = true } = {}) {
   if (s.length > max) fail(400, `${field} can be at most ${max} characters.`);
   return s;
 }
-const NAME = /^[\p{L}\p{N} ._\-]{2,24}$/u, EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const nameTaken = (name, except) => Object.values(db.users).some(u => u.uid !== except && u.name.toLowerCase() === name.toLowerCase());
+/* ---- names ----
+   Display names are unique by "look", not just by spelling: "Nyx", "nyx", "N.y.x", "Nyx_" and "Nуx" (Cyrillic у)
+   all count as the same name, so nobody can pose as someone else. */
+const NAME = /^[\p{L}\p{N}](?:[\p{L}\p{N}]|[ ._\-](?=[\p{L}\p{N}])){1,23}$/u, EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const NAME_RULE = 'Names are 2–24 characters: letters and numbers, with single spaces, dots, dashes or underscores between them.';
+const LOOKALIKE = { 'а': 'a', 'в': 'b', 'е': 'e', 'ё': 'e', 'к': 'k', 'м': 'm', 'н': 'h', 'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'ԁ': 'd', 'ɡ': 'g',
+  'α': 'a', 'β': 'b', 'ε': 'e', 'η': 'n', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'ω': 'w', '0': 'o', '1': 'l', '|': 'l', 'ı': 'i', 'ł': 'l' };
+const nameKey = n => String(n).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/./gu, c => LOOKALIKE[c] || c).replace(/i/g, 'l').replace(/[ ._\-]/g, '');
+const RESERVED = ['admin', 'administrator', 'moderator', 'mod', 'staff', 'system', 'support', 'darkmoon', 'darkmoonhub', 'deleted', 'everyone', 'here', 'official'].map(nameKey);
+const nameTaken = (name, except) => { const k = nameKey(name); return Object.values(db.users).some(u => u.uid !== except && nameKey(u.name) === k); };
+// Tidies a typed name (Unicode-normalised, single spaces) and checks it. Returns the clean name or fails with a clear message.
+function checkName(raw, except) {
+  const name = String(raw ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+  if (!NAME.test(name)) fail(400, NAME_RULE);
+  if (RESERVED.includes(nameKey(name))) fail(400, 'That name is reserved. Choose another.');
+  if (nameTaken(name, except)) fail(409, 'That name is taken (or looks too much like an existing one). Choose another.');
+  return name;
+}
 function uniqueName(base) {
-  let b = String(base || 'Seer').replace(/[^\p{L}\p{N} ._\-]/gu, '').trim().slice(0, 20); if (b.length < 2) b = 'Seer';
-  let n = b, i = 2; while (nameTaken(n)) n = b.slice(0, 20) + (i++); return n;
+  let b = String(base || 'Seer').normalize('NFKC').replace(/[^\p{L}\p{N} ._\-]/gu, '').replace(/[ ._\-]{2,}/g, ' ').replace(/^[ ._\-]+|[ ._\-]+$/g, '').slice(0, 20).replace(/[ ._\-]+$/, '');
+  if (!NAME.test(b) || RESERVED.includes(nameKey(b))) b = 'Seer';
+  let n = b, i = 2; while (nameTaken(n)) n = b + (i++); return n;
 }
 const brief = uid => { const u = db.users[uid]; return u ? { uid, name: u.name, role: u.role } : { uid, name: 'deleted', role: 'user' }; };
 const pub = u => ({ uid: u.uid, name: u.name, role: u.role, bio: u.bio || '', created: u.created, banned: !!u.banned });
@@ -200,11 +217,10 @@ on('POST', '/api/auth/google', async ctx => {
 on('POST', '/api/auth/dev', ctx => {
   if (!DEV_LOGIN) fail(404, 'Not found.');
   limit('auth:' + ctx.ip, 120, 600e3, 'Too many sign-in attempts from this network. Wait a few minutes.');
-  const name = text(ctx.body.name, 24, { min: 2, field: 'Name', multiline: false }), email = String(ctx.body.email || '').trim().toLowerCase();
-  if (!NAME.test(name)) fail(400, 'Use letters, numbers, spaces, dots, dashes or underscores in your name.');
+  const email = String(ctx.body.email || '').trim().toLowerCase();
   if (!EMAIL.test(email)) fail(400, 'Enter a valid email address.');
   let u = db.users[db.emails[email]];
-  if (!u) { if (nameTaken(name)) fail(409, 'That name is taken. Choose another.'); const uid = newId(); u = db.users[uid] = { uid, name, email, role: 'user', created: Date.now(), bio: '', ach: [] }; db.emails[email] = uid; }
+  if (!u) { const name = checkName(ctx.body.name); const uid = newId(); u = db.users[uid] = { uid, name, email, role: 'user', created: Date.now(), bio: '', ach: [] }; db.emails[email] = uid; }
   if (u.banned) fail(403, 'This account has been banned.');
   return issue(u);
 });
@@ -217,10 +233,13 @@ on('GET', '/api/me', ctx => { const u = ctx.user; if (!u) fail(401, 'Sign in fir
 on('PATCH', '/api/me', ctx => {
   const u = need(ctx);
   if (ctx.body.name !== undefined) {
-    const name = text(ctx.body.name, 24, { min: 2, field: 'Name', multiline: false });
-    if (!NAME.test(name)) fail(400, 'Use letters, numbers, spaces, dots, dashes or underscores in your name.');
-    if (nameTaken(name, u.uid)) fail(409, 'That name is taken. Choose another.');
-    u.name = name;
+    // Saving the profile resends the current name; only an actual change is checked, so older names that predate the rules keep working.
+    const typed = String(ctx.body.name ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+    if (typed !== u.name) {
+      const name = checkName(typed, u.uid), recent = (u.renames || []).filter(t => Date.now() - t < 864e5);   // kept on the member, so restarts don't reset it
+      if (recent.length >= 3) fail(429, 'You can change your name at most 3 times a day.');
+      u.name = name; u.renames = [...recent, Date.now()];
+    }
   }
   if (ctx.body.bio !== undefined) u.bio = text(ctx.body.bio, 500, { field: 'Bio' });
   save(); return { user: meView(u) };
@@ -267,14 +286,16 @@ on('GET', '/api/users/:uid', ctx => {
 });
 on('GET', '/api/users', ctx => {
   need(ctx); const q = ctx.url.searchParams.get('q');
-  return { users: Object.values(db.users).filter(u => !u.banned && matchQ(q, u.name)).slice(0, 20).map(pub) };
+  const k = String(q || '').toLowerCase().trim();
+  return { users: Object.values(db.users).filter(u => !u.banned && matchQ(q, u.name))
+    .sort((a, b) => (b.name.toLowerCase().startsWith(k) - a.name.toLowerCase().startsWith(k)) || a.name.localeCompare(b.name)).slice(0, 20).map(pub) };
 });
 
 /* ---- chat rooms ---- */
 const roomList = () => Object.values(db.rooms).sort((a, b) => a.order - b.order || a.created - b.created).map(r => {
   const m = db.messages[r.id] || []; return { ...r, count: m.length, lastAt: m.length ? m[m.length - 1].at : r.created };
 });
-const msgOut = m => ({ ...m, author: brief(m.uid) });
+const msgOut = m => ({ ...m, author: brief(m.uid), tags: (m.tags || []).map(brief) });
 on('GET', '/api/rooms', ctx => { need(ctx); return { rooms: roomList() }; });
 on('POST', '/api/rooms', ctx => {
   need(ctx, { admin: true }); const id = newId();
@@ -298,16 +319,33 @@ on('GET', '/api/rooms/:id/messages', ctx => {
   const before = +ctx.url.searchParams.get('before') || Infinity, list = m.filter(x => x.at < before);
   return { messages: list.slice(-60).map(msgOut), more: list.length > 60 };
 });
+/* ---- tags (@Name) ----
+   At each "@", the longest member name that matches exactly (ignoring capitals) and ends at a word boundary wins,
+   so "@Ann" never tags "Anna", and "@Nyx." at the end of a sentence still tags Nyx. */
+const WORDCH = /[\p{L}\p{N}_]/u;
+function findTags(t) {
+  const out = []; if (!t || !t.includes('@')) return out;
+  const users = Object.values(db.users).filter(u => !u.banned).map(u => [u.uid, u.name.toLowerCase()]).sort((a, b) => b[1].length - a[1].length);
+  const lower = t.toLowerCase();
+  for (let i = lower.indexOf('@'); i >= 0; i = lower.indexOf('@', i + 1)) {
+    if (i > 0 && (WORDCH.test(t[i - 1]) || t[i - 1] === '/')) continue;   // e-mail addresses (a@b.com) and web links (x.com/@name) are not tags
+    for (const [uid, n] of users) if (lower.startsWith(n, i + 1) && !WORDCH.test(t[i + 1 + n.length] || '') && !/^[.\-][\p{L}\p{N}]/u.test(t.slice(i + 1 + n.length, i + 3 + n.length))) { if (!out.includes(uid)) out.push(uid); break; }
+  }
+  return out.slice(0, 20);
+}
+// Notifies tagged members (not the author) and returns who was tagged, so it can be stored with the post.
 function mentions(t, from, link, where) {
-  const lower = t.toLowerCase(); if (!lower.includes('@')) return;
-  Object.values(db.users).forEach(u => { if (u.uid !== from.uid && !u.banned && lower.includes('@' + u.name.toLowerCase())) notify(u.uid, { type: 'mention', text: `${from.name} mentioned you in ${where}`, link }); });
+  const tags = findTags(t).filter(uid => uid !== from.uid);
+  tags.forEach(uid => { notify(uid, { type: 'mention', text: `${from.name} tagged you in ${where}`, link }); });
+  return tags;
 }
 on('POST', '/api/rooms/:id/messages', ctx => {
   const u = need(ctx, { post: true }), room = db.rooms[ctx.params.id]; if (!room) fail(404, 'No such room.');
   limit('chat:' + u.uid, 8, 10e3, 'You are sending messages too quickly.');
   const m = { id: newId(), uid: u.uid, text: text(ctx.body.text, 1000, { min: 1, field: 'Message' }), at: Date.now() };
   const list = db.messages[room.id]; list.push(m); if (list.length > ROOM_KEEP) list.splice(0, list.length - ROOM_KEEP);
-  save(); broadcast('msg', { rid: room.id, m: msgOut(m) }); mentions(m.text, u, 'chat.html#' + room.id, '#' + room.title); award(u);
+  m.tags = mentions(m.text, u, 'chat.html#' + room.id, '#' + room.title); if (!m.tags.length) delete m.tags;
+  save(); broadcast('msg', { rid: room.id, m: msgOut(m) }); award(u);
   return { message: msgOut(m) };
 });
 on('DELETE', '/api/rooms/:id/messages/:mid', ctx => {
@@ -349,6 +387,12 @@ on('POST', '/api/dms/:id/messages', ctx => {
   notify(other, { type: 'dm', text: `New message from ${u.name}`, link: 'dms.html#' + d.id, key: 'dm:' + d.id });
   return { message: msgOut(m) };
 });
+on('DELETE', '/api/dms/:id/messages/:mid', ctx => {
+  const u = need(ctx), d = dmOf(u, ctx.params.id), i = d.messages.findIndex(m => m.id === ctx.params.mid);
+  if (i < 0) fail(404, 'Message not found.');
+  if (d.messages[i].uid !== u.uid) fail(403, 'You can only delete your own messages.');
+  d.messages.splice(i, 1); save(); d.members.forEach(x => emit(x, 'dm-del', { id: d.id, mid: ctx.params.mid })); return { ok: true };
+});
 on('POST', '/api/dms/:id/read', ctx => {
   const u = need(ctx), d = dmOf(u, ctx.params.id); (d.read || (d.read = dict()))[u.uid] = Date.now();
   (db.notifs[u.uid] || []).forEach(n => { if (n.key === 'dm:' + d.id) n.read = true; });
@@ -364,7 +408,7 @@ on('POST', '/api/notifications/read', ctx => {
 });
 
 /* ---- forum ---- */
-const threadOut = (t, full) => ({ id: t.id, title: t.title, author: brief(t.uid), at: t.at, lastAt: t.lastAt, comments: full ? t.comments.map(msgOut) : t.comments.length, ...(full ? { body: t.body } : { excerpt: t.body.slice(0, 220) }) });
+const threadOut = (t, full) => ({ id: t.id, title: t.title, author: brief(t.uid), at: t.at, lastAt: t.lastAt, comments: full ? t.comments.map(msgOut) : t.comments.length, ...(full ? { body: t.body, tags: (t.tags || []).map(brief) } : { excerpt: t.body.slice(0, 220) }) });
 on('GET', '/api/threads', ctx => {
   const q = ctx.url.searchParams.get('q');
   return { threads: Object.values(db.threads).filter(t => matchQ(q, t.title, t.body, brief(t.uid).name)).sort((a, b) => b.lastAt - a.lastAt).slice(0, 100).map(t => threadOut(t)) };
@@ -373,7 +417,8 @@ on('POST', '/api/threads', ctx => {
   const u = need(ctx, { post: true }); limit('thread:' + u.uid, 4, 600e3, 'You can start at most 4 threads every 10 minutes.');
   const id = newId(), now = Date.now();
   db.threads[id] = { id, uid: u.uid, title: text(ctx.body.title, 120, { min: 3, field: 'Title', multiline: false }), body: text(ctx.body.body, 10000, { min: 1, field: 'Post' }), at: now, lastAt: now, comments: [] };
-  save(); mentions(db.threads[id].body, u, 'thread.html#' + id, 'a forum thread'); award(u); return { thread: threadOut(db.threads[id], true) };
+  const tags = mentions(db.threads[id].body, u, 'thread.html#' + id, 'a forum thread'); if (tags.length) db.threads[id].tags = tags;
+  save(); award(u); return { thread: threadOut(db.threads[id], true) };
 });
 on('GET', '/api/threads/:id', ctx => { const t = db.threads[ctx.params.id]; if (!t) fail(404, 'This thread no longer exists.'); return { thread: threadOut(t, true) }; });
 on('DELETE', '/api/threads/:id', ctx => {
@@ -384,10 +429,11 @@ on('POST', '/api/threads/:id/comments', ctx => {
   const u = need(ctx, { post: true }), t = db.threads[ctx.params.id]; if (!t) fail(404, 'This thread no longer exists.');
   limit('comment:' + u.uid, 6, 60e3, 'You are commenting too quickly.');
   const c = { id: newId(), uid: u.uid, text: text(ctx.body.text, 3000, { min: 1, field: 'Comment' }), at: Date.now() };
+  const tags = mentions(c.text, u, 'thread.html#' + t.id, `a comment on “${t.title}”`); if (tags.length) c.tags = tags;
   t.comments.push(c); t.lastAt = c.at; save();
-  const watchers = new Set([t.uid, ...t.comments.map(x => x.uid)]); watchers.delete(u.uid);
+  const watchers = new Set([t.uid, ...t.comments.map(x => x.uid)]); watchers.delete(u.uid); tags.forEach(x => watchers.delete(x));
   watchers.forEach(w => notify(w, { type: 'comment', text: `${u.name} commented on “${t.title}”`, link: 'thread.html#' + t.id, key: 'thread:' + t.id }));
-  mentions(c.text, u, 'thread.html#' + t.id, 'a forum comment'); award(u);
+  award(u);
   return { comment: msgOut(c) };
 });
 on('DELETE', '/api/threads/:id/comments/:cid', ctx => {

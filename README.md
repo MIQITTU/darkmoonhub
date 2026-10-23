@@ -74,8 +74,8 @@ Static-only hosts (Netlify, GitHub Pages) can't run the server, so they can't ho
 | Page | What it does |
 |---|---|
 | `index.html` | Community hub: buttons to every area and live previews of the forum, chat rooms, market and map. No landing page. |
-| `chat.html` | Live chat rooms (signed-in members only). `@Name` mentions notify that member. |
-| `dms.html` | Private one-to-one conversations, started from search or any profile |
+| `chat.html` | Live chat rooms (signed-in members only). Type `@` to tag a member (a name picker appears); tags link to their profile and notify them. Works in chat, threads and comments. |
+| `dms.html` | Private one-to-one conversations, started from search or any profile. Senders can delete their own messages. |
 | `inbox.html` | Notifications: new DMs, comments on your threads, mentions, achievements, moderation notices. The bell in the header shows the unread count live. |
 | `profile.html#id` | Bio, activity counts, 10 community achievements (chat, forum, map, market, membership), threads, listings and pins |
 | `forum.html` / `thread.html` | Threads with comments and search; author names link to profiles |
