@@ -26,8 +26,20 @@ function popup(p){const d=document.createElement('div');
    <p class="mono muted" style="font-size:.75rem;margin-top:8px">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</p>`;
   const q=a=>d.querySelector(`[data-a="${a}"]`);
   if(q('lock'))q('lock').onclick=UP.guard(async e=>{try{await UP.api('PATCH','pins/'+p.id,{locked:!p.locked})}catch(x){UP.toast(x.message)}});
-  if(q('edit'))q('edit').onclick=()=>{d.innerHTML=`<form style="display:grid;gap:8px"><input type="text" maxlength="80" value="${UP.esc(p.title)}" aria-label="Title"><textarea maxlength="1000" aria-label="Description">${UP.esc(p.desc)}</textarea><div class="row"><button class="btn sm" type="submit">Save</button></div></form>`;
-    d.querySelector('form').onsubmit=UP.guard(async e=>{e.preventDefault();try{await UP.api('PATCH','pins/'+p.id,{title:d.querySelector('input').value,desc:d.querySelector('textarea').value})}catch(x){UP.toast(x.message)}})};
+  // The tap must not reach the map, and the popup's contents are swapped only after the tap has finished:
+  // swapping them during the tap removes the Edit button, so the map thinks the empty map was tapped and closes the popup.
+  if(q('edit'))q('edit').onclick=e=>{L.DomEvent.stop(e);setTimeout(()=>{
+    d.innerHTML=`<form style="display:grid;gap:8px;min-width:min(240px,62vw)"><label class="lbl" for="pe-t">Title</label><input type="text" id="pe-t" maxlength="80" value="${UP.esc(p.title)}">
+      <label class="lbl" for="pe-d">Description</label><textarea id="pe-d" maxlength="1000" style="min-height:90px">${UP.esc(p.desc)}</textarea><p class="err" id="pe-e" hidden></p>
+      <div class="row" style="gap:6px"><button class="btn sm" type="submit">Save</button><button class="btn ghost sm" type="button" data-a="cancel">Cancel</button></div></form>`;
+    const f=d.querySelector('form'),m=markers[p.id];
+    L.DomEvent.disableClickPropagation(f);L.DomEvent.disableScrollPropagation(f);
+    f.addEventListener('keydown',ev=>ev.stopPropagation());   // typing "+", "-" or arrows must not zoom or pan the map
+    f.querySelector('[data-a="cancel"]').onclick=ev=>{L.DomEvent.stop(ev);setTimeout(()=>{m.setPopupContent(()=>popup(pins[p.id]))},0)};
+    f.onsubmit=UP.guard(async ev=>{ev.preventDefault();const er=f.querySelector('#pe-e');er.hidden=true;
+      try{const j=await UP.api('PATCH','pins/'+p.id,{title:f.querySelector('#pe-t').value,desc:f.querySelector('#pe-d').value});place(j.pin);UP.toast('Pin updated')}
+      catch(x){er.hidden=false;er.textContent=x.message}});
+    m.setPopupContent(d);f.querySelector('#pe-t').focus()},0)};   // pin the form as the popup's content while editing (the usual content is rebuilt on every refresh)
   if(q('del'))UP.confirmBtn(q('del'),'Confirm delete',async()=>{await UP.api('DELETE','pins/'+p.id)});
   return d}
 function place(p){pins[p.id]=p;let m=markers[p.id];const open=m&&m.isPopupOpen();
